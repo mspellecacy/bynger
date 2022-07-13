@@ -5,16 +5,18 @@ use gloo::storage::{LocalStorage, Storage};
 use itertools::Itertools;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::UnwrapThrowExt;
-use web_sys::HtmlInputElement;
+use web_sys::{HtmlInputElement};
 use web_sys::InputEvent;
-use web_sys::{Event, HtmlElement};
+use web_sys::{Event};
 use weblog::{console_info, console_log};
 use yew::prelude::*;
 
+
 use crate::search_client::{MediaType, SearchResponse, TMDB};
 use crate::show_card::{Show, ShowCard};
-use crate::site_config::ConfigOptions;
+use crate::site_config::ByngerStore;
 use crate::schedule_show::ScheduleShow;
+use crate::ui_helpers::UiHelpers;
 
 pub struct FindShow {
     modal_state: FindShowModalState,
@@ -71,25 +73,12 @@ impl From<()> for FindShowMsg {
     }
 }
 
-fn get_value_from_input_event(e: InputEvent) -> String {
-    let event: Event = e.dyn_into().unwrap_throw();
-    let event_target = event.target().unwrap_throw();
-    let target: HtmlInputElement = event_target.dyn_into().unwrap_throw();
-    target.value()
-}
-
-fn get_id_from_event_elem(e: Event) -> Option<String> {
-    let et = e.target().unwrap();
-    let t: HtmlElement = et.dyn_into().unwrap_throw();
-
-    Some(t.id())
-}
-
 #[derive(Clone, PartialEq, Properties)]
 pub struct SearchProps {
     pub value: String,
     pub on_change: Callback<String>,
     pub search_request: Callback<bool>,
+    node_ref: NodeRef,
 }
 
 #[function_component(SearchInput)]
@@ -98,7 +87,9 @@ pub fn search_input(props: &SearchProps) -> Html {
         value,
         on_change,
         search_request,
+        node_ref: _,
     } = props.clone();
+
 
     let oninput = Callback::from(move |ie: InputEvent| {
         let event: Event = ie.dyn_into().unwrap_throw();
@@ -114,9 +105,16 @@ pub fn search_input(props: &SearchProps) -> Html {
         if k.key_code() == 13 { search_request.emit(true) }
     );
 
+    use_effect_with_deps(move |node_ref| {
+        if let Some(input) = node_ref.cast::<HtmlInputElement>() {
+            input.focus();
+        } || ()
+    }, props.node_ref.clone());
+
     html! {
           <div class="control has-icons-right">
-            <input class="input" type="text" placeholder="Show Title" {value} {oninput} {onkeydown} />
+            <input ref={props.node_ref.clone()}
+            class="input" type="text" placeholder="Show Title" {value} {oninput} {onkeydown} />
             <span class="icon is-small is-right">
                 <i class="gg-search"></i>
             </span>
@@ -147,17 +145,14 @@ pub fn search_results(props: &SearchResultsProps) -> Html {
             let columns = chunks
                 .into_iter()
                 .fold(Vec::new(), |mut acc, r| {
-                    let show = props.shows.get(&r);
-                    match show {
-                        Some(s) => {
-                            acc.push(html! {
-                                <div key={s.id.clone()} class={col_is.to_owned()}>
-                                    <ShowCard show={s.to_owned()} onclick={&onclick} />
-                                </div>
-                            });
-                        },
-                        None => { html!{ /* do nothing */ }; }
+                    if let Some(s) = props.shows.get(&r){
+                        acc.push(html! {
+                            <div key={s.id.clone()} class={col_is.to_owned()}>
+                                <ShowCard show={s.to_owned()} onclick={&onclick} />
+                            </div>
+                        });
                     }
+
                     acc
             });
 
@@ -169,8 +164,8 @@ impl Component for FindShow {
     type Message = FindShowMsg;
     type Properties = ();
 
-    fn create(ctx: &Context<Self>) -> Self {
-        let api_key: String =  LocalStorage::get(ConfigOptions::TmdbApiKey.to_string()).expect("Missing API Key");
+    fn create(_ctx: &Context<Self>) -> Self {
+        let api_key: String =  LocalStorage::get(ByngerStore::TmdbApiKey.to_string()).expect("Missing API Key");
         Self {
             modal_state: Default::default(),
             search_client: TMDB::new(api_key),
@@ -247,7 +242,7 @@ impl Component for FindShow {
             FindShowMsg::PageRequest(page) => {
                 console_info!("Page Requested: ", page);
                 self.current_page = Some(page);
-                let sv = self.search_value.clone();
+                let _sv = self.search_value.clone();
                 let sr = self.search_results.get(&page);
                 match sr {
                     None => {
@@ -331,7 +326,7 @@ impl Component for FindShow {
         let find_show_fragment = html! {
                 <div class="box">
                     <div class="control">
-                        <button class="button is-primary" {onclick}>{ "Find Show" }</button>
+                        <button class="button" {onclick}>{ "Find Show" }</button>
                     </div>
                 </div>
             };
@@ -340,13 +335,13 @@ impl Component for FindShow {
             FindShowModalState::Closed => find_show_fragment,
             FindShowModalState::Searching => {
                 let have_response = self.search_results.get(&self.current_page.unwrap());
-
+                let search_node_ref = NodeRef::default();
                 let search_nav = match have_response {
                     Some(_) => {
                         let crr = self.current_page.unwrap();
                         let max = self.max_page.unwrap();
                         let onclick = ctx.link().callback(move |me: MouseEvent| {
-                            let id = get_id_from_event_elem(Event::from(me));
+                            let id = UiHelpers::get_id_from_event_elem(Event::from(me));
                             match id {
                                 None => FindShowMsg::Working,
                                 Some(p) => {
@@ -456,12 +451,12 @@ impl Component for FindShow {
                                 <div class="modal-card-title mt-0 mb-0 pr-1">
                                     <div class="field has-addons">
                                          <div class="control">
-                                            <a class="button is-primary" onclick={onsearch}>{"Search"}</a>
+                                            <a class="button" onclick={onsearch}>{"Search"}</a>
                                         </div>
                                         <div class="control is-expanded">
-                                            <SearchInput value={self.search_value.to_owned()} {on_change} {search_request} />
+                                            <SearchInput value={self.search_value.to_owned()} {on_change} {search_request} node_ref={search_node_ref}/>
                                         </div>
-                                    </div>
+                                     </div>
                                 </div>
                                 <button class="delete is-large" aria-label="close" onclick={&closemodal}></button>
                             </header>

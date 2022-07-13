@@ -1,3 +1,5 @@
+$background: hsl(0, 0%, 21%);
+
 .hero {
   &.has-background {
     position: relative;
@@ -70,13 +72,35 @@
     padding: 5px 0;
     border-bottom-left-radius: 6px;
     border-bottom-right-radius: 6px;
-
     /* "transparent" only works here because == rgba(0,0,0,0) */
-    background-image: linear-gradient(to bottom, transparent, hsl(171deg, 100%, 41%));
+    background-image: linear-gradient(to bottom, transparent, hsla(171, 100%, 41%, 0.32));
   }
 }
 
+.episode-box {
+  .column {
+    font-size: 0.75rem;
+    max-width: 33%;
+    overflow-x: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+//document.querySelector("body > div > main > div > table > tbody > tr:nth-child(1)")
+#bynger_cal {
+  > tbody {
+     > tr {
+       //min-height: 4rem;
+       > td {
+         align-content: start;
+         text-align: left;
+         height: 8rem;
+         width: 10rem
+       }
+    }
+  }
+}
 
 #search-modal {
-    padding-bottom: .25em !important;
+  padding-bottom: .25em !important;
 }

@@ -195,12 +195,9 @@ impl Component for ShowCard {
                                 <li>{episode_count}</li>
                             </ul>
                         </div>
-                        <footer class="card-footer is-clickable">
-                            <div class="level card-footer-item pl-1 pr-1 pt-0 pb-0 has-background-info " onclick={onclick}>
-                                <span class="level-left has-text-white pl-0">{"Schedule"}</span>
-                                <span class="icon level-left has-text-white">
-                                    <i class="gg-calendar-dates is-large pr-0"></i>
-                                </span>
+                        <footer class="card-footer">
+                            <div class="card-footer-item pl-1 pr-1 pt-0 pb-0" onclick={onclick}>
+                                <div class="is-clickable pl-0">{"Pick"}</div>
                             </div>
                         </footer>
                     </div>

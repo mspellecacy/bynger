@@ -12,9 +12,14 @@ mod show_card;
 mod tv_card;
 mod schedule_show;
 mod site_config;
+mod episodes_picker;
+mod event_calendar;
+mod ui_helpers;
+mod events;
 
 use crate::find_show::FindShow;
-use crate::site_config::{ConfigOptions, SiteConfig};
+use crate::site_config::{ByngerStore, SiteConfig};
+use crate::event_calendar::EventCalendar;
 
 #[derive(Routable, PartialEq, Clone, Debug)]
 pub enum Route {
@@ -88,8 +93,9 @@ impl Component for Bynger {
                         </div>
                     </div>
                 </nav>
-                <div class="container pt-1">
+                <div class="container">
                     <main>
+                        <br />
                         <Switch<Route> render={Switch::render(switch)} />
                     </main>
                 </div>
@@ -99,7 +105,7 @@ impl Component for Bynger {
 }
 
 fn switch(routes: &Route) -> Html {
-    let api_key: Result<String, StorageError> = LocalStorage::get(ConfigOptions::TmdbApiKey.to_string());
+    let api_key: Result<String, StorageError> = LocalStorage::get(ByngerStore::TmdbApiKey.to_string());
 
     // Dont redirect if we're already going to config (otherwise infinite redirect)
     if api_key.is_err() && routes != &Route::Config {
@@ -107,7 +113,9 @@ fn switch(routes: &Route) -> Html {
     } else {
         match routes {
             Route::Home => {
-                html! { <div> { "Home" } </div> }
+                html! {
+                    <EventCalendar />
+                }
             }
             Route::Schedule => {
                 html! { <FindShow /> }
