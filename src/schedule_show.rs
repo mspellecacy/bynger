@@ -1,22 +1,35 @@
-use std::ops::{Add};
+use std::collections::HashMap;
+use std::ops::{Add, Deref};
+use std::rc::Rc;
 use std::str::FromStr;
-use chrono::{DateTime, Duration, Local, Utc};
+use chrono::{Datelike, DateTime, Duration, Local, NaiveDate, NaiveDateTime, NaiveTime, Utc};
+use futures::stream::iter;
+use futures::StreamExt;
+use gloo::console::console;
 
 use gloo::storage::{LocalStorage, Storage};
-use wasm_bindgen::__rt::IntoJsResult;
+use itertools::{fold, Itertools};
 use wasm_bindgen::JsValue;
 use wasm_bindgen::prelude::wasm_bindgen;
 
-use web_sys::{Element, HtmlElement, HtmlInputElement, Node, NodeList};
+use web_sys::{Document, Element, HtmlElement, HtmlInputElement, Node, NodeList};
 
-use weblog::{console_error, console_log};
+use weblog::{console_error, console_info, console_log};
 use yew::prelude::*;
 
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use yew_router::prelude::*;
 use crate::search_client::{MediaType, TMDB};
 use crate::show_card::Show;
 use crate::site_config::ByngerStore;
 use crate::episodes_picker::EpisodePicker;
 use crate::event_calendar::CalendarSchedulableEvent;
+use crate::event_manager::EventManager;
+use crate::events::ScheduledEvent;
+use crate::Route::Schedule;
+use crate::schedule_show::ScheduleShowState::EpisodeScheduler;
+use crate::{Route, search_client, StorageError};
+use crate::find_show::FindShowMsg;
 use crate::ui_helpers::UiHelpers;
 
 #[wasm_bindgen(module="/js/helpers.js")]
@@ -28,16 +41,34 @@ extern "C" {
     fn calendar_range_value(cal: &JsValue) -> String;
 }
 
+#[derive(Clone, PartialEq)]
+pub struct SchedulingBoundaries {
+    pub start_date: NaiveDate,
+    pub start_time: NaiveTime,
+    pub end_date: NaiveDate,
+    pub end_time: NaiveTime,
+}
+
+#[derive(Clone, PartialEq)]
+pub struct SchedulingOptions {
+    pub days_of_week: HashMap<u32, bool>,
+    pub eps_per_day: usize,
+    pub use_end_date: bool, // UI shows this in boundary limits.
+}
+
 // FIXME: These structs should probably get moved in to a search_client as generic output types.
 // TODO: This is a bit redundant, but eventually I would like to have a more generic search client.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct Episode {
     pub air_date: String,
     pub episode_number: usize,
     pub name: String,
     pub id: usize,
     pub season_number: usize,
-    pub still_path: Option<String>
+    pub still_path: Option<String>,
+    pub episode_run_time: usize, // in Minutes
+    pub show_name: String,  // For reference
+    pub show_id: usize,
 }
 
 impl CalendarSchedulableEvent for Episode {
@@ -55,6 +86,10 @@ impl CalendarSchedulableEvent for Episode {
 
     fn description(&self) -> String {
         "// Not implemented".to_string()
+    }
+
+    fn duration(&self) -> usize {
+        self.episode_run_time
     }
 }
 
@@ -104,7 +139,8 @@ pub enum ScheduleShowMsg {
     FetchSeasons,
     ShowResult(Show),
     SeasonsResult(Vec<Season>),
-    ScheduleEpisodes(Vec<Episode>)
+    ScheduleEpisodes(Vec<Episode>),
+    DistributeEpisodes(SchedulingBoundaries, SchedulingOptions)
 }
 
 fn get_thumbnail(path: Option<String>) -> Html {
@@ -131,7 +167,7 @@ impl Component for ScheduleShow {
         Self {
             show: None,
             seasons: None,
-            episodes_to_schedule: vec![],
+            episodes_to_schedule: Vec::<Episode>::new(),
             node_ref: NodeRef::default(),
             schedule_show_state: ScheduleShowState::default(),
             search_client: TMDB::new(api_key),
@@ -178,21 +214,34 @@ impl Component for ScheduleShow {
                     None => {}
                     Some(show) => {
                         ctx.link().send_future(async move {
+                            let fuzzy_runtime_max = show.episode_run_time.as_ref().unwrap().iter().max().unwrap_or(&60_usize).to_owned();
+                            //let fuzzy_runtime_max = Some(45_usize);
                             let seasons = search_client.get_seasons_episodes(&show.id).await;
                             match seasons {
                                 None => { ScheduleShowMsg::Error("Unknown".to_string()) }
                                 Some(s) => {
                                     let seasons = s.into_iter().fold(Vec::<Season>::new(), |mut seasons, so| {
                                         let eps = so.episodes.into_iter().fold(Vec::<Episode>::new(), |mut eps, ep| {
+                                            // If the episode comes with a runtime, use that, otherwise use the max length from the show level array.
+                                            // not exact and relies on an undocumented field returned from the API.
+                                            // TODO: In the the future a user-fudgable option for setting a default value would be nice.
+                                            let fuzzy_runtime = match ep.runtime {
+                                                None => { fuzzy_runtime_max }
+                                                Some(runtime) => { runtime }
+                                            };
                                             eps.push(Episode {
-                                                air_date: ep.air_date,
+                                                air_date: ep.air_date.unwrap_or(String::from("unknown")),
                                                 episode_number: ep.episode_number,
                                                 name: ep.name,
                                                 id: ep.id,
                                                 season_number: ep.season_number,
-                                                still_path: ep.still_path
+                                                still_path: ep.still_path,
+                                                episode_run_time: fuzzy_runtime,
+                                                show_name: show.clone().title.unwrap(),
+                                                show_id: (&show.id).parse().unwrap(),
                                             });
 
+                                            // console_log!(format!("ep {}; runtime: {}.", ep.episode_number, fuzzy_runtime));
                                             eps
                                         });
 
@@ -238,6 +287,74 @@ impl Component for ScheduleShow {
             ScheduleShowMsg::ScheduleEpisodes(eps) => {
                 self.episodes_to_schedule = eps;
                 self.schedule_show_state = ScheduleShowState::EpisodeScheduler;
+
+                true
+            }
+            ScheduleShowMsg::DistributeEpisodes(bounds, options) => {
+                // Start at the beginning
+                let mut curr_date = NaiveDateTime::new(bounds.start_date, bounds.start_time);
+                let mut per_day = 0;
+                let upper_datetime = NaiveDateTime::new(bounds.end_date, bounds.end_time);
+
+                let scheduled_events= self.episodes_to_schedule.iter()
+                    .fold(Vec::<ScheduledEvent>::new(), |mut scheduled_events, ep| {
+                        // Check days_of_week and advance over any day not available to schedule.
+                        while !options.days_of_week.get(&(curr_date.weekday().num_days_from_monday())).unwrap() {
+                            curr_date = NaiveDateTime::new(curr_date.add(Duration::days(1)).date(), bounds.start_time);
+                            per_day = 0;
+                        }
+
+                        if options.use_end_date && curr_date > upper_datetime {
+                            // TODO: Error if they're attempting to schedule more episodes than their parameters can accommodate
+                        }
+
+                        // Push our current episode with the available date
+                        scheduled_events.push(
+                            ScheduledEvent {
+                                scheduled_date: DateTime::from_utc(curr_date, Utc),
+                                media_type: ep.media_type(),
+                                episode: Some(ep.to_owned()),
+                                movie: None
+                            }
+                        );
+
+                        // Advance our currently schedulable datetime by the episode's length
+                        curr_date = curr_date.add(Duration::minutes(ep.episode_run_time as i64));
+                        // increment out per day.
+                        per_day += 1;
+
+                        // if we've reached our max eps per day or advanced the time beyond the upper time boundary
+                        // then advance the day and reset the counter
+                        if per_day == options.eps_per_day || curr_date.time() > bounds.end_time {
+                            curr_date = NaiveDateTime::new(curr_date.add(Duration::days(1)).date(), bounds.start_time);
+                            per_day = 0;
+                        }
+
+                        // Fold
+                        scheduled_events
+                });
+
+                // We should always schedule all eps.
+                assert_eq!(&self.episodes_to_schedule.len(), &scheduled_events.len());
+
+                // console_log!(format!("{} - {}", se.scheduled_date, se.event.name() ));
+                // scheduled_events.into_iter().for_each(|se| {
+                //     console_info!(format!("{} - {} - {}", se.scheduled_date.weekday(), se.scheduled_date, se.event.name() ));
+                // });
+
+                let mut em = EventManager::create();
+
+                match em.add_events(scheduled_events) {
+                    Ok(_) => {
+                        self.schedule_show_state = ScheduleShowState::Loading;
+                        console_log!("BYNGER - Schedule Update Succeeded");
+                    }
+                    Err(e) => console_log!(format!("BYNGER - Schedule Update Failed - {}", e))
+                }
+
+                // Close our modal by re-using the on_cancel emitter by faking a mouse click.
+                // Hacky but effective.
+                ctx.props().on_cancel.emit(MouseEvent::new("click").unwrap() );
 
                 true
             }
@@ -301,15 +418,41 @@ impl Component for ScheduleShow {
 
             ScheduleShowMsg::ScheduleEpisodes(episodes_to_schedule)
         });
+
+        // on_schedule does the work of distributing episodes with the user's desired criteria.
         let on_schedule = ctx.link().callback( move |_| {
-            let picker_selector = "#pickerDateTimeStart".to_string();
-            if let Some(mut current_dt) = UiHelpers::get_value_from_input_by_id(picker_selector) {
-                let mut events_in_day = 0;
+            let raw_start_date = UiHelpers::get_value_from_input_by_id("#pickerDateStart").expect("Missing Start Date?");
+            let raw_start_time = UiHelpers::get_value_from_input_by_id("#pickerTimeStart").expect("Missing Start Time?");
+            let raw_end_time = UiHelpers::get_value_from_input_by_id("#pickerTimeEnd").expect("Missing End Time?");
+            let raw_end_date = UiHelpers::get_value_from_input_by_id("#pickerDateEnd").expect("Missing End Date?");
 
-                console_log!(format!("Starting From: {:?}", current_dt));
-            }
+            let schedule_bounds = SchedulingBoundaries {
+                start_date: NaiveDate::parse_from_str(&raw_start_date, "%Y-%m-%d").expect("Bad start date format."),
+                start_time: NaiveTime::parse_from_str(&raw_start_time, "%H:%M").expect("Bad start time format."),
+                end_date: NaiveDate::parse_from_str(&raw_end_date, "%Y-%m-%d").expect("Bad end date format."),
+                end_time: NaiveTime::parse_from_str(&raw_end_time, "%H:%M").expect("Bad end time format.")
+            };
 
-            ScheduleShowMsg::Working
+            // 0 = Monday ... 6 = Sunday.
+            // Mirrors: https://docs.rs/chrono/latest/chrono/enum.Weekday.html#method.num_days_from_monday
+            let dows = HashMap::from([
+                (0, UiHelpers::get_value_from_checkbox_by_id("#checkbox_dow_Monday").expect("Missing dow")),
+                (1, UiHelpers::get_value_from_checkbox_by_id("#checkbox_dow_Tuesday").expect("Missing dow")),
+                (2, UiHelpers::get_value_from_checkbox_by_id("#checkbox_dow_Wednesday").expect("Missing dow")),
+                (3, UiHelpers::get_value_from_checkbox_by_id("#checkbox_dow_Thursday").expect("Missing dow")),
+                (4, UiHelpers::get_value_from_checkbox_by_id("#checkbox_dow_Friday").expect("Missing dow")),
+                (5, UiHelpers::get_value_from_checkbox_by_id("#checkbox_dow_Saturday").expect("Missing dow")),
+                (6, UiHelpers::get_value_from_checkbox_by_id("#checkbox_dow_Sunday").expect("Missing dow")),
+            ]);
+            let raw_epd = UiHelpers::get_value_from_input_by_id("#episodesPerDay").expect("Missing Eps Per Day?");
+            let raw_ued = UiHelpers::get_value_from_checkbox_by_id("#checkbox_use_end_date").expect("Missing use end date.");
+            let schedule_options = SchedulingOptions {
+                days_of_week: dows,
+                eps_per_day: raw_epd.parse::<usize>().expect("Bad eps per day value"),
+                use_end_date: raw_ued
+            };
+
+            ScheduleShowMsg::DistributeEpisodes(schedule_bounds, schedule_options)
         });
 
         let mut title = "Loading...".to_string();
@@ -377,6 +520,7 @@ impl Component for ScheduleShow {
                 }
             }
             ScheduleShowState::EpisodeScheduler => {
+                // TODO: Most of these options could have user-defined defaults
                 title = format!("{} Episodes to Distribute", self.episodes_to_schedule.len());
                 let days_of_week = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
                 let range_start = Local::now();
@@ -386,7 +530,7 @@ impl Component for ScheduleShow {
                 let start_date_string = range_start.format(date_format).to_string();
                 let start_time_string = range_start.format(time_format).to_string();
                 let end_date_string = range_end.format(date_format).to_string();
-                let end_time_string = range_end.format(time_format).to_string();
+                let end_time_string = range_end.add(Duration::hours(2)).format(time_format).to_string();
 
                 html!{
                     <div>
@@ -394,8 +538,8 @@ impl Component for ScheduleShow {
                     <div class="box">
                         <div>
                             <h1 class="is-size-4">{"Distribution Date and Time Limits"}</h1>
-                            // <h3 class="subtitle is-6">{"Leave end date empty for opened ended scheduling."}</h3>
                         </div>
+                        // For whatever reason Bulma doesn't stylize date/time inputs. (lame)
                         <div class="field mb-0 is-horizontal">
                             <div class="field-label is-normal">
                                 <label class="label">{"Start Date"}</label>
@@ -427,7 +571,7 @@ impl Component for ScheduleShow {
                             <div class="field-body">
                                 <div class="field">
                                     <div class="control">
-                                        <input id="pickerTimeStart" type="time" value={end_time_string} />
+                                        <input id="pickerTimeEnd" type="time" value={end_time_string} />
                                     </div>
                                 </div>
                             </div>
@@ -484,11 +628,11 @@ impl Component for ScheduleShow {
                                                         <div class="column is-half">
                                                             <div class="field">
                                                                 <input class="is-checkradio is-success"
-                                                                        id={format!("checkbox_{day}")}
+                                                                        id={format!("checkbox_dow_{day}")}
                                                                         type="checkbox"
                                                                         checked={matches!(idx, 0..=4)}
                                                                 />
-                                                                <label for={format!("checkbox_{day}")}>
+                                                                <label for={format!("checkbox_dow_{day}")}>
                                                                     {day}
                                                                 </label>
                                                             </div>
@@ -507,24 +651,11 @@ impl Component for ScheduleShow {
                                                 <select id="episodesPerDay">
                                                     // 6 Eps a day? Might as well fill...
                                                     {(1..=6).into_iter().map(|idx|
-                                                        html!{ <option value={idx.to_string()} selected={idx==1}>{idx}</option> }
+                                                        html!{ <option value={idx.to_string()} selected={idx==2}>{idx}</option> }
                                                     ).collect::<Html>()}
                                                     <option value="0">{"Fill"}</option>
                                                 </select>
                                             </div>
-                                        </div>
-                                    </div>
-                                    <br />
-                                    <div>
-                                        <div class="field">
-                                            <input class="is-checkradio is-success"
-                                                    id="noEndDatetime"
-                                                    type="checkbox"
-                                                    checked=false
-                                            />
-                                            <label for="ignoreEndDate">
-                                                {"Ignore End Date"}
-                                            </label>
                                         </div>
                                     </div>
                                 </div>

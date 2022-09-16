@@ -105,11 +105,14 @@ pub fn search_input(props: &SearchProps) -> Html {
         if k.key_code() == 13 { search_request.emit(true) }
     );
 
-    use_effect_with_deps(move |node_ref| {
-        if let Some(input) = node_ref.cast::<HtmlInputElement>() {
-            input.focus();
-        } || ()
-    }, props.node_ref.clone());
+    {
+        use_effect_with_deps(move |node_ref| {
+            if let Some(input) = node_ref.cast::<HtmlInputElement>() {
+                input.focus();
+            }
+            || ()
+        }, props.node_ref.clone())
+    }
 
     html! {
           <div class="control has-icons-right">
@@ -332,7 +335,7 @@ impl Component for FindShow {
             };
 
         match self.modal_state {
-            FindShowModalState::Closed => find_show_fragment,
+            FindShowModalState::Closed => find_show_fragment as Html,
             FindShowModalState::Searching => {
                 let have_response = self.search_results.get(&self.current_page.unwrap());
                 let search_node_ref = NodeRef::default();

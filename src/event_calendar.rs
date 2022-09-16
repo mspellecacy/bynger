@@ -1,25 +1,41 @@
 use std::ops::{Sub};
 use chrono::{Datelike, DateTime, Duration, NaiveDate, NaiveTime, TimeZone, Utc};
+use chrono::format::Fixed::TimezoneOffset;
+use gloo::console::console;
+use itertools::Itertools;
+
+use serde::{Deserialize, Deserializer};
+use weblog::console_log;
 use yew::prelude::*;
 
-use crate::event_calendar::EventCalendarMsg::ChangeDate;
+use crate::event_calendar::EventCalendarMsg::{ChangeDate, ChangeDay};
+use crate::event_manager::EventManager;
+use crate::events::ScheduledEvent;
 use crate::search_client::MediaType;
 use crate::ui_helpers::UiHelpers;
-
 
 pub trait CalendarSchedulableEvent {
     fn id(&self) -> String;
     fn name(&self) -> String;
     fn media_type(&self) -> MediaType;
     fn description(&self) -> String;
+    fn duration(&self) -> usize; // in minutes
 }
 
+// impl Deserialize for dyn CalendarSchedulableEvent {
+//     fn deserialize<'a, D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'a> {
+//         todo!()
+//     }
+// }
+
 pub struct EventCalendar {
-    current_date: DateTime<Utc>
+    active_day: DateTime<Utc>,
+    active_month: DateTime<Utc>,
 }
 
 pub enum EventCalendarMsg {
-    ChangeDate(DateTime<Utc>)
+    ChangeDate(DateTime<Utc>),
+    ChangeDay(DateTime<Utc>)
 }
 
 #[derive(Clone, PartialEq, Properties)]
@@ -51,26 +67,6 @@ fn get_calendar_cells(date: &DateTime<Utc>) -> Vec<Option<NaiveDate>> {
     cells
 }
 
-fn formatted_calendar_cell(date: &Option<NaiveDate>) -> Html {
-    match date {
-        None => html!{<td></td>},
-        Some(d) => {
-            let day = format!{"{}", d.day()};
-            html!{
-                <td>
-                    <div>
-                        <p>{day}</p>
-                        <p class="is-size-7">{"// Event 1"}</p>
-                        <p class="is-size-7">{"// Event 2"}</p>
-                        <p class="is-size-7">{"// Event 3"}</p>
-                        <p class="is-size-7">{"// Event 4"}</p>
-                    </div>
-                </td>
-            }
-        }
-    }
-}
-
 // TODO: Pretty sure the TimeZone management on this component is wonk.
 // TODO: Implement a configuration setting for what TimeZone to use by default for display.
 impl Component for EventCalendar {
@@ -80,21 +76,29 @@ impl Component for EventCalendar {
     fn create(ctx: &Context<Self>) -> Self {
         let current_date = ctx.props().date;
         Self {
-            current_date
+            active_day: current_date,
+            active_month: current_date
         }
     }
 
     fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             ChangeDate(new_date) => {
-                self.current_date = new_date;
+                self.active_month = new_date;
+                true
+            }
+            ChangeDay(day) => {
+                self.active_day = day;
+
                 true
             }
         }
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
-        let date = self.current_date;
+        let day = self.active_day;
+        let date = self.active_month;
+        let dn = day.date_naive();
 
         let chevron_click = ctx.link().callback(move |me:MouseEvent| {
             let mut out_date = date;
@@ -127,20 +131,58 @@ impl Component for EventCalendar {
             ChangeDate(out_date)
         });
 
+        let em = EventManager::create();
+        let day_events: Vec<&ScheduledEvent> = em.events.iter()
+            .filter(|se| se.scheduled_date.date_naive() == dn )
+            .collect();
         let cells = get_calendar_cells(&date);
-        let weeks= cells.chunks(7).map(|week| {
-            let _day_val = move |val: Option<NaiveDate>| {
-              match val {
-                  None => String::from(""),
-                  Some(val) => format!{"{}", val.day()}
-              }
-            };
+        let cell_id_format = "%Y_%m_%d";
+        let day_click = ctx.link().callback(move |me:MouseEvent| {
+            let mut out = day;
+            if let Some(elem_id) = UiHelpers::get_id_from_event_elem(Event::from(me)) {
+                let id_split: Vec<&str> = elem_id.split("_").collect();
+                out = Utc.ymd(
+                    id_split[0].parse::<i32>().unwrap(),
+                    id_split[1].parse::<u32>().unwrap(),
+                    id_split[2].parse::<u32>().unwrap())
+                    .and_hms(0, 0, 1);
+            }
 
+            ChangeDay(out)
+        });
+
+        let day_val = |d: Option<NaiveDate>| {
+            match d {
+                None => html! {<td></td>},
+                Some(d) => {
+                    let day_id = d.format(cell_id_format).to_string();
+                    let events: Vec<&ScheduledEvent> = em.events.iter()
+                        .filter(|se| se.scheduled_date.date_naive() == d )
+                        .collect();
+                    html! {
+                        // Even though the onclick is on the TD, nested elements trigger it and fail
+                        // to pick up the ID properly. Hackily adding the ID to all the elements
+                        // resolves this. Not ideal, but works without breaking anything.
+                        <td class="day-link is-clickable"
+                            id={day_id.clone()} onclick={&day_click}
+                            title={format!("{} Events Scheduled", events.len())}>
+                            <div id={day_id.clone()} class="is-inline-block">
+                                {d.format("%d")}
+                                if !events.is_empty() {
+                                    <img id={day_id.clone()} class="events-tag" />
+                                }
+                            </div>
+                        </td>
+                    }
+                }
+            }
+        };
+        let weeks= cells.chunks(7).map(|week| {
             html!{
                 <tr>
                   {
-                    week.iter().map(|&day| {
-                      formatted_calendar_cell(&day)
+                    week.iter().map(|&d| {
+                      day_val(d.clone())
                     }).collect::<Html>()
                   }
                 </tr>
@@ -148,51 +190,106 @@ impl Component for EventCalendar {
         }).collect::<Html>();
 
         html! {
-            <div class="box">
-                <nav class="level">
-                    <p class="level-left" onclick={&chevron_click}>
-                        <button class="button">
-                            <span class="icon is-small">
-                                <i class="gg-chevron-left" id="cal_month_prev"></i>
-                            </span>
-                        </button>
-                    </p>
-                    <p class="level-item" onclick={&chevron_click}>
-                        <a class="button" id="cal_month_curr">{"today"}</a>
-                    </p>
-                    <p class="level-item has-text-centered">
-                        <div>
-                            <p class="heading">{&date.format("%Y").to_string()}</p>
-                            <p class="title">{&date.format("%B").to_string()}</p>
+            <div class="is-centered box calendar-container">
+                <div class="columns">
+                    <div class="column calendar-left">
+                        // This should probably be broken in to it's own component
+                        // <CalendarCard date={date} event-manager={em} />
+                        <div class="card">
+                            <div class="card-header-title is-centered pb-0">
+                                <div class="date-num-name-box">
+                                    <div class="date-month-name">
+                                        {&day.format("%B")}
+                                    </div>
+                                    <div class="date-day-num">
+                                        {&day.format("%d")}
+                                    </div>
+                                    <div class="date-day-name">
+                                        {&day.format("%A")}
+                                    </div>
+                                </div>
+                                // <div>{&date.format("%A, %B %d %Y").to_string()}</div>
+                            </div>
+                            <div class="card-content pt-0">
+                                <div class="content">
+                                // <a class="panel-block is-active">
+                                //     <span class="panel-icon">
+                                //         <i class="gg-tv" aria-hidden="true"></i>
+                                //     </span>
+                                //     {"bulma"}
+                                // </a>
+                                    <p class="subtitle">{"Schedule"}</p>
+                                    {
+                                        day_events.iter().map(|&ev| {
+                                            html!{
+                                                <a class="panel-block schedule-item">
+                                                    <span class="panel-icon">
+                                                        <i class="gg-tv" aria-hidden="true"></i>
+                                                    </span>
+                                                    {&ev.scheduled_date.format("%R")}
+                                                    {" | "}
+                                                    {&ev.episode.as_ref().unwrap().show_name}
+                                                    {" - "}
+                                                    {&ev.episode.as_ref().unwrap().name}
+                                                </a>
+                                            }
+                                        }).collect::<Html>()
+                                    }
+                                </div>
+                            </div>
+                            <footer class="card-footer">
+
+                            </footer>
                         </div>
-                    </p>
-                    <p class="level-item" onclick={&chevron_click}>
-                        <a class="button" id="cal_add_show">{"add show"}</a>
-                    </p>
-                    <p class="level-right" onclick={&chevron_click}>
-                        <button class="button">
-                            <span class="icon is-small">
-                                <i class="gg-chevron-right" id="cal_month_next"></i>
-                            </span>
-                        </button>
-                    </p>
-                </nav>
-                <table id="bynger_cal" class="table is-striped is-fullwidth">
-                    <thead>
-                        <tr>
-                            <th>{"Monday"}</th>
-                            <th>{"Tuesday"}</th>
-                            <th>{"Wednesday"}</th>
-                            <th>{"Thursday"}</th>
-                            <th>{"Friday"}</th>
-                            <th>{"Saturday"}</th>
-                            <th>{"Sunday"}</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {weeks}
-                    </tbody>
-                </table>
+                    </div>
+                    <div class="column is-three-fifths calendar-base">
+                        <nav class="level">
+                            // Spamming the ID so the onclick works, hacky.
+                            <p class="level-left" onclick={&chevron_click} id="cal_month_prev">
+                                <button class="button" id="cal_month_prev">
+                                    <span class="icon is-small" id="cal_month_prev">
+                                        <i class="gg-chevron-left" id="cal_month_prev"></i>
+                                    </span>
+                                </button>
+                            </p>
+                            <p class="level-item" onclick={&chevron_click}>
+                                <a class="button" id="cal_month_curr">{"today"}</a>
+                            </p>
+                            <p class="level-item has-text-centered">
+                                <div>
+                                    <p class="heading">{&date.format("%Y")}</p>
+                                    <p class="title">{&date.format("%B")}</p>
+                                </div>
+                            </p>
+                            <p class="level-item" onclick={&chevron_click}>
+                                <a class="button" id="cal_add_show">{"add show"}</a>
+                            </p>
+                            <p class="level-right" onclick={&chevron_click} id="cal_month_next">
+                                <button class="button" id="cal_month_next">
+                                    <span class="icon is-small" id="cal_month_next">
+                                        <i class="gg-chevron-right" id="cal_month_next"></i>
+                                    </span>
+                                </button>
+                            </p>
+                        </nav>
+                        <table id="bynger_cal" class="table is-fullwidth is-striped">
+                            <thead>
+                                <tr class="">
+                                    <th>{"MON"}</th>
+                                    <th>{"TUE"}</th>
+                                    <th>{"WED"}</th>
+                                    <th>{"THU"}</th>
+                                    <th>{"FRI"}</th>
+                                    <th>{"SAT"}</th>
+                                    <th>{"SUN"}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {weeks}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
         }
     }

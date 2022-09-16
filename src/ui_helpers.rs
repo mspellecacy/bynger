@@ -13,11 +13,23 @@ impl UiHelpers {
         Some(t.id())
     }
 
-    pub fn get_value_from_input_by_id(id:String) -> Option<String> {
+    pub fn get_value_from_input_by_id(id: &str) -> Option<String> {
         let mut out_value = None;
         let doc = gloo_utils::document();
         if let Ok(input_elem) = doc.query_selector(&id) {
             let val = (HtmlInputElement::from(JsValue::from(input_elem))).value();
+            out_value = Some(val);
+        }
+
+        out_value
+    }
+
+    pub fn get_value_from_checkbox_by_id(id: &str) -> Option<bool> {
+        let mut out_value = None;
+        let doc = gloo_utils::document();
+        if let Ok(input_elem) = doc.query_selector(&id) {
+            let val = (HtmlInputElement::from(JsValue::from(input_elem))).checked();
+
             out_value = Some(val);
         }
 

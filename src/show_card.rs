@@ -101,29 +101,35 @@ pub struct ShowCardProps {
 
 impl ShowCard {
     fn get_thumbnail(path: Option<String>) -> Html {
-        match path {
+        let thumb = match path {
             None => {
                 html! {}
             }
             Some(s) => {
                 html! {
                     <figure class="image is-2by3">
-                        <img src={s} alt="Placeholder image" />
+                        <img class="is-radiusless" src={s} alt="Placeholder image" />
                     </figure>
                 }
             }
-        }
+        };
+
+        thumb
     }
 
     fn value_into_pair<T: Display>(name: &str, item: &Option<T>) -> Html {
-        let nbsp = String::from('\u{00a0}');
+        let nbsp = '\u{00a0}'.to_string();
         let template = move |k, v| -> Html {
-            html!{
+            let out = html!{
                 <p class="level">
                     <span class="show-item has-text-weight-semibold">{k}</span>
                     <span class="show-item">{v}</span>
                 </p>
-        }};
+            };
+
+            out
+        };
+
         match item {
             // None => html!{ <p class="level"><span class="show-item">{'\u{00a0}'}</span></p> },
             None => template(&nbsp, &nbsp),
@@ -166,7 +172,7 @@ impl Component for ShowCard {
             .link()
             .callback(|_e: MouseEvent| ShowCardMsg::ShowClicked);
 
-        match Some(ctx.props().show.clone()) {
+        let view = match Some(ctx.props().show.clone()) {
             None => {
                 html! { /* do nothing */ }
             }
@@ -179,7 +185,7 @@ impl Component for ShowCard {
                 html! {
                     <div class="card show-card pl-0 pr-0" data-id={s.id}>
                          // Show Title Header ...
-                        <header class="card-header has-background-primary-light is-shadowless">
+                        <header class="card-header is-shadowless">
                             <p class="card-header-title pl-1">{&title}</p>
                         </header>
                         // Card image ...
@@ -203,6 +209,8 @@ impl Component for ShowCard {
                     </div>
                 }
             }
-        }
+        };
+
+        view
     }
 }

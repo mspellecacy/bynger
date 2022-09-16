@@ -1,9 +1,16 @@
 use std::fmt::{Display, Formatter};
+use std::future::Future;
+use std::rc::Rc;
 
 use reqwasm::http::{Request};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
-use futures::future::{try_join_all};
+use std::thread;
+use std::time::Duration;
+use futures::future::{join_all, try_join_all};
+use futures::TryFutureExt;
+use itertools::{fold, Itertools};
+use web_sys::RequestMode;
 
 
 use weblog::{console_error, console_log};
@@ -85,7 +92,7 @@ pub trait SearchClient {
 
 #[derive(Clone, PartialEq)]
 pub struct TMDB {
-    pub api_key: String,
+    pub api_key: Rc<String>,
 }
 
 #[derive(Default, Clone, PartialEq, Serialize, Deserialize)]
@@ -195,7 +202,7 @@ pub struct TMDBSearchResponse {
 #[derive(Default, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TMDBEpisodeObj {
     #[serde(default)]
-    pub air_date: String,
+    pub air_date: Option<String>,
     #[serde(default)]
     pub episode_number: usize,
     #[serde(default)]
@@ -205,7 +212,11 @@ pub struct TMDBEpisodeObj {
     #[serde(default)]
     pub season_number: usize,
     #[serde(default)]
-    pub still_path: Option<String>
+    pub still_path: Option<String>,
+
+    // Not actually documented in the TMDB API, but it does return runtime for some show episodes.
+    #[serde(default)]
+    pub runtime: Option<usize>,
 }
 
 #[derive(Default, Clone, PartialEq, Serialize, Deserialize)]
@@ -230,7 +241,7 @@ pub struct TMDBSeasonObj {
 impl TMDB {
     pub fn new(api_key: String) -> Self {
         Self {
-            api_key
+           api_key: Rc::new(api_key)
         }
     }
 
@@ -351,10 +362,10 @@ impl TMDB {
             Ok(res) => {
                 match res.json::<TMDBSeasonObj>().await {
                     Ok(season) => Some(season),
-                    Err(e) => None
+                    Err(e) => { console_log!(format!("Failed parsing JSON - {}", e)); None }
                 }
             }
-            Err(e) => None
+            Err(e) => { console_log!(format!("Failed Season Request - {}", e)); None }
         }
     }
 
@@ -373,14 +384,18 @@ impl TMDB {
                         }
                     }).collect();
 
+                // let test = join_all(seasons).await.into_iter().fold_ok(Vec::<TMDBSeasonObj>::new(), |mut acc, se| {
+                //     acc.push(se);
+                //     acc
+                // });
+                // Some(test.unwrap())
+
                 match try_join_all(seasons).await {
-                    Ok(seasons) => {
-                        Some(seasons)
-                    }
-                    Err(e) => { None }
+                    Ok(seasons) => Some(seasons),
+                    Err(e) => { console_log!(format!("Failed TV Season Fetch Join - {}", e)); None }
                 }
             }
-            Err(e) => { None }
+            Err(e) => { console_log!(format!("Failed TV Season Fetch - {}", e)); None }
         }
     }
 }

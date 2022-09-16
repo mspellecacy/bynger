@@ -16,6 +16,7 @@ mod episodes_picker;
 mod event_calendar;
 mod ui_helpers;
 mod events;
+mod event_manager;
 
 use crate::find_show::FindShow;
 use crate::site_config::{ByngerStore, SiteConfig};
@@ -33,6 +34,7 @@ pub enum Route {
 
 pub struct Bynger {
     nav_open: bool,
+    api_key: Result<String, StorageError>,
 }
 pub enum ByngerMsg {
     ToggleNav
@@ -43,8 +45,10 @@ impl Component for Bynger {
     type Properties = ();
 
     fn create(ctx: &Context<Self>) -> Self {
+        let api_key: Result<String, StorageError> = LocalStorage::get(ByngerStore::TmdbApiKey.to_string());
         Self {
             nav_open: false,
+            api_key
         }
     }
 
@@ -60,7 +64,6 @@ impl Component for Bynger {
     fn view(&self, ctx: &Context<Self>) -> Html {
         let is_active = if self.nav_open { "is-active" } else { "" };
         let toggle_nav = ctx.link().callback(|_| ByngerMsg::ToggleNav);
-
         html! {
             <BrowserRouter>
                 <nav class="navbar" role="navigation" aria-label="main navigation">
@@ -81,21 +84,20 @@ impl Component for Bynger {
                     </div>
                     <div class={classes!("navbar-menu", is_active)}>
                         <div class="navbar-start">
-                            <div onclick={&toggle_nav}>
-                                <Link<Route> classes="navbar-item" to={Route::Home}>{ "Home" }</Link<Route>>
+                            <div onclick={&toggle_nav} class="navbar-item">
+                                <Link<Route> to={Route::Home}>{ "Home" }</Link<Route>>
                             </div>
-                            <div onclick={&toggle_nav}>
-                                <Link<Route> classes="navbar-item" to={Route::Schedule}>{ "Schedule" }</Link<Route>>
+                            <div onclick={&toggle_nav} class="navbar-item">
+                                <Link<Route> to={Route::Schedule}>{ "Schedule" }</Link<Route>>
                             </div>
-                            <div onclick={&toggle_nav}>
-                                <Link<Route> classes="navbar-item" to={Route::Config}>{ "Config" }</Link<Route>>
+                            <div onclick={&toggle_nav} class="navbar-item">
+                                <Link<Route> to={Route::Config}>{ "Config" }</Link<Route>>
                             </div>
                         </div>
                     </div>
                 </nav>
                 <div class="container">
-                    <main>
-                        <br />
+                    <main class="columns is-centered">
                         <Switch<Route> render={Switch::render(switch)} />
                     </main>
                 </div>
@@ -108,14 +110,12 @@ fn switch(routes: &Route) -> Html {
     let api_key: Result<String, StorageError> = LocalStorage::get(ByngerStore::TmdbApiKey.to_string());
 
     // Dont redirect if we're already going to config (otherwise infinite redirect)
-    if api_key.is_err() && routes != &Route::Config {
+    let main = if api_key.is_err() && routes != &Route::Config {
         html! { <Redirect<Route> to={Route::Config}/> }
     } else {
         match routes {
             Route::Home => {
-                html! {
-                    <EventCalendar />
-                }
+                html! { <EventCalendar /> }
             }
             Route::Schedule => {
                 html! { <FindShow /> }
@@ -124,7 +124,9 @@ fn switch(routes: &Route) -> Html {
                 html! { <SiteConfig /> }
             }
         }
-    }
+    };
+
+    main
 }
 
 fn main() {
