@@ -40,14 +40,14 @@ impl EventManager {
         LocalStorage::set(self.storage.as_ref(), self.events.to_vec().clone())
     }
 
-    fn purge_events(&self) {
-        LocalStorage::delete(self.storage.as_ref())
+    fn purge_events(&mut self) -> Result<(), StorageError> {
+        self.events.clear();
+
+        self.store()
     }
 
-    pub fn add_events(&mut self, events:  Vec<ScheduledEvent>) -> Result<(), StorageError> {
-        events.into_iter().for_each(|se| {
-            self.add_event(se);
-        });
+    pub fn add_events(&mut self, mut events: Vec<ScheduledEvent>) -> Result<(), StorageError> {
+        self.events.append(&mut events);
 
         self.store() // commit new schedule to LocalStorage
     }

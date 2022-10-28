@@ -19,7 +19,7 @@ use yew::prelude::*;
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use yew_router::prelude::*;
-use crate::search_client::{MediaType, TMDB};
+use crate::search_client::{MediaType, TMDB, TMDBMovieObj};
 use crate::show_card::Show;
 use crate::site_config::ByngerStore;
 use crate::episodes_picker::EpisodePicker;
@@ -196,7 +196,15 @@ impl Component for ScheduleShow {
                             }
                         }
                         MediaType::Movie => {
-                            ScheduleShowMsg::Working
+                            match search_client.get_movie(&show_id).await {
+                                Ok(movie) => {
+                                    ScheduleShowMsg::ShowResult(Show::from(movie))
+                                }
+                                Err(e) => {
+                                    ScheduleShowMsg::Error(e)
+                                }
+                            }
+                            //ScheduleShowMsg::Working
                         }
                         MediaType::Actor => {
                             ScheduleShowMsg::Working
@@ -268,10 +276,20 @@ impl Component for ScheduleShow {
                 false
             }
             ScheduleShowMsg::ShowResult(show) => {
-                self.show = Some(show);
-                ctx.link().send_future(async move {
-                    ScheduleShowMsg::FetchSeasons
-                });
+                self.show = Some(show.clone());
+
+                match show.media_type {
+                    MediaType::Tv => {
+                        ctx.link().send_future(async move {
+                            ScheduleShowMsg::FetchSeasons
+                        });
+                    }
+                    MediaType::Movie => {
+                        self.schedule_show_state = ScheduleShowState::EpisodePicker;
+                    }
+                    MediaType::Actor => {}
+                    MediaType::Unknown => {}
+                }
 
                 true
             }
@@ -463,61 +481,104 @@ impl Component for ScheduleShow {
             }
             ScheduleShowState::EpisodePicker => {
                 let show = self.show.clone().unwrap();
-                let seas = self.seasons.clone().expect("Missing Seasons");
                 title = show.title.unwrap_or_else(|| "Loading...".to_string());
-                subtitle = format!("First Aired: {} | Seasons: {}", show.first_air_date.unwrap(), show.number_of_seasons.unwrap());
+                // TODO: These should probably be broken down into their own component cards.
+                match show.media_type {
+                    MediaType::Tv => {
+                        let seas = self.seasons.clone().expect("Missing Seasons");
+                        subtitle = format!("First Aired: {} | Seasons: {}", show.first_air_date.unwrap(), show.number_of_seasons.unwrap());
 
-                let seasons = seas.into_iter().fold(Vec::<Html>::new(), |mut acc, s| {
-                    // FIXME: Feels like there should be a better way, but I dont know.
-                    let overview_max_len = 300;
-                    let _season_id = s.id;
-                    let season_number = s.season_number;
-                    let episode_count = s.episodes.clone().unwrap().len();
-                    let poster_fragment = get_thumbnail(s.poster_path.clone());
-                    let overview = s.overview.clone().unwrap_or_else(|| String::from("No Overview"));
-                    let overview_long = || overview.len() > overview_max_len;
-                    let air_date = s.air_date.clone().unwrap_or_else(|| String::from("Missing Air Date"));
+                        let seasons = seas.into_iter().fold(Vec::<Html>::new(), |mut acc, s| {
+                            // FIXME: Feels like there should be a better way, but I dont know.
+                            let overview_max_len = 300;
+                            let _season_id = s.id;
+                            let season_number = s.season_number;
+                            let episode_count = s.episodes.clone().unwrap().len();
+                            let poster_fragment = get_thumbnail(s.poster_path.clone());
+                            let overview = s.overview.clone().unwrap_or_else(|| String::from("No Overview"));
+                            let overview_long = || overview.len() > overview_max_len;
+                            let air_date = s.air_date.clone().unwrap_or_else(|| String::from("Missing Air Date"));
 
-                    acc.push(html!{
-                        <div class="card card-season mb-3">
-                            <div class="card-content pb-0 pt-1 pr-0 pl-0">
-                                <div class="media mb-1">
-                                    <div class="media-left pl-2">
-                                        <div class="box pl-1 pr-1 pt-1 pb-1">{poster_fragment}</div>
-                                    </div>
-                                    <div class="media-content mb-0 pb-0">
-                                        <container class="container box pt-1 pb-1 pl-1 pr-1 mr-2">
-                                            <h1 class="title is-4">{format!{"Season {}", &season_number}}</h1>
-                                            <h3 class="subtitle is-6 mb-1">
-                                                <div>{format!{"Episodes: {}", &episode_count}}</div>
-                                                <div>{format!{"First Aired: {}", &air_date}}</div>
-                                            </h3>
-                                            <p class="card-season-overview">{&overview}</p>
-                                            {if overview_long() {
-                                            // TODO: Implement description reveal.
-                                            html!{
-                                            <p class="card-season-overview-more is-primary">
-                                                <span class="icon is-pulled-right mr-1">
-                                                    <i class="gg-chevron-down-o is-large is-info"></i>
-                                                </span>
-                                            </p>}
-                                            } else { html!{} }}
-                                        </container>
+                            acc.push(html!{
+                                <div class="card card-season mb-3">
+                                    <div class="card-content pb-0 pt-1 pr-0 pl-0">
+                                        <div class="media mb-1">
+                                            <div class="media-left pl-2">
+                                                <div class="box pl-1 pr-1 pt-1 pb-1">{poster_fragment}</div>
+                                            </div>
+                                            <div class="media-content mb-0 pb-0">
+                                                <container class="container box pt-1 pb-1 pl-1 pr-1 mr-2">
+                                                    <h1 class="title is-4">{format!{"Season {}", &season_number}}</h1>
+                                                    <h3 class="subtitle is-6 mb-1">
+                                                        <div>{format!{"Episodes: {}", &episode_count}}</div>
+                                                        <div>{format!{"First Aired: {}", &air_date}}</div>
+                                                    </h3>
+                                                    <p class="card-season-overview">{&overview}</p>
+                                                    {if overview_long() {
+                                                    // TODO: Implement description reveal.
+                                                    html!{
+                                                    <p class="card-season-overview-more is-primary">
+                                                        <span class="icon is-pulled-right mr-1">
+                                                            <i class="gg-chevron-down-o is-large is-info"></i>
+                                                        </span>
+                                                    </p>}
+                                                    } else { html!{} }}
+                                                </container>
+                                            </div>
+                                        </div>
+                                        <div class="content mt-0 pt-0">
+                                            <EpisodePicker season={Some(s)} />
+                                        </div>
                                     </div>
                                 </div>
-                                <div class="content mt-0 pt-0">
-                                    <EpisodePicker season={Some(s)} />
+                            });
+
+                            acc  // Fold in season
+                        }); // EpisodePicker
+                        html!{
+                            {for seasons}
+                        }
+                    }
+                    MediaType::Movie => {
+                        subtitle = format!("Released: {}", show.first_air_date.as_ref().unwrap());
+                        let overview_max_len = 300;
+                        let poster_fragment = get_thumbnail(show.poster.clone());
+                        let overview = show.overview.clone().unwrap_or_else(|| String::from("No Overview"));
+                        let overview_long = || overview.len() > overview_max_len;
+                        let air_date = show.first_air_date.clone().unwrap_or_else(|| String::from("Missing Air Date"));
+
+                        html!{
+                            <div class="card card-season mb-3">
+                                <div class="card-content pb-0 pt-1 pr-0 pl-0">
+                                    <div class="media mb-1">
+                                        <div class="media-left pl-2">
+                                            <div class="box pl-1 pr-1 pt-1 pb-1">{poster_fragment}</div>
+                                        </div>
+                                        <div class="media-content mb-0 pb-0">
+                                            <container class="container box pt-1 pb-1 pl-1 pr-1 mr-2">
+                                                <p class="card-season-overview">{&overview}</p>
+                                                // {if overview_long() {
+                                                // // TODO: Implement description reveal.
+                                                // html!{
+                                                // <p class="card-season-overview-more is-primary">
+                                                //     <span class="icon is-pulled-right mr-1">
+                                                //         <i class="gg-chevron-down-o is-large is-info"></i>
+                                                //     </span>
+                                                // </p>}
+                                                // } else { html!{} }}
+                                            </container>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    });
-
-                    acc  // Fold in season
-                }); // EpisodePicker
-
-                html!{
-                    {for seasons}
+                        }
+                    }
+                    MediaType::Actor => { html!{<p>{"Im an actor!"}</p>} }
+                    MediaType::Unknown => { html!{<p>{"Im an unknown!"}</p>} }
                 }
+
+
+
             }
             ScheduleShowState::EpisodeScheduler => {
                 // TODO: Most of these options could have user-defined defaults
