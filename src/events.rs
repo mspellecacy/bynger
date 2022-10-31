@@ -4,7 +4,7 @@ use crate::event_calendar::CalendarSchedulableEvent;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde::de::{Error, Visitor};
 use serde::ser::SerializeStruct;
-use crate::schedule_show::Episode;
+use crate::schedule_show::{Episode, Movie};
 use crate::search_client::MediaType;
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -14,7 +14,7 @@ pub struct ScheduledEvent {
     pub media_type: MediaType,
     // Scheduled Events must implement the CalendarSchedulableEvent trait use by the Event Calendar.
     pub episode: Option<Episode>,
-    pub movie: Option<String>,
+    pub movie: Option<Movie>,
 }
 
 // impl Serialize for ScheduledEvent<'_> {

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::ops::{Add, Deref};
 use std::rc::Rc;
 use std::str::FromStr;
-use chrono::{Datelike, DateTime, Duration, Local, NaiveDate, NaiveDateTime, NaiveTime, Utc};
+use chrono::{Datelike, DateTime, Duration, Local, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Utc};
 use futures::stream::iter;
 use futures::StreamExt;
 use gloo::console::console;
@@ -71,6 +71,15 @@ pub struct Episode {
     pub show_id: usize,
 }
 
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
+pub struct Movie {
+    pub release_date: String,
+    pub show_name: String,
+    pub id: usize,
+    pub movie_id: usize,
+}
+
+
 impl CalendarSchedulableEvent for Episode {
     fn id(&self) -> String {
         self.id.to_string()
@@ -107,8 +116,9 @@ pub struct Season {
 #[derive(Clone, PartialEq)]
 pub enum ScheduleShowState {
     Loading,
-    EpisodePicker,
-    EpisodeScheduler
+    ShowPicker,
+    EpisodeScheduler,
+    MovieScheduler,
 }
 
 impl Default for ScheduleShowState {
@@ -140,7 +150,8 @@ pub enum ScheduleShowMsg {
     ShowResult(Show),
     SeasonsResult(Vec<Season>),
     ScheduleEpisodes(Vec<Episode>),
-    DistributeEpisodes(SchedulingBoundaries, SchedulingOptions)
+    DistributeEpisodes(SchedulingBoundaries, SchedulingOptions),
+    DistributeMovie((NaiveDate, NaiveTime))
 }
 
 fn get_thumbnail(path: Option<String>) -> Html {
@@ -155,6 +166,11 @@ fn get_thumbnail(path: Option<String>) -> Html {
                 </figure>
             }
     }
+}
+
+
+fn tv_schedule_body() -> Html {
+ return html!{/* */};
 }
 
 impl Component for ScheduleShow {
@@ -285,7 +301,7 @@ impl Component for ScheduleShow {
                         });
                     }
                     MediaType::Movie => {
-                        self.schedule_show_state = ScheduleShowState::EpisodePicker;
+                        self.schedule_show_state = ScheduleShowState::MovieScheduler;
                     }
                     MediaType::Actor => {}
                     MediaType::Unknown => {}
@@ -295,7 +311,7 @@ impl Component for ScheduleShow {
             }
             ScheduleShowMsg::SeasonsResult(seasons) => {
                 self.seasons = Some(seasons);
-                self.schedule_show_state = ScheduleShowState::EpisodePicker;
+                self.schedule_show_state = ScheduleShowState::ShowPicker;
                 true
             }
             ScheduleShowMsg::Error(e) => {
@@ -372,7 +388,38 @@ impl Component for ScheduleShow {
 
                 // Close our modal by re-using the on_cancel emitter by faking a mouse click.
                 // Hacky but effective.
-                ctx.props().on_cancel.emit(MouseEvent::new("click").unwrap() );
+                ctx.props().on_cancel.emit(MouseEvent::new("click").unwrap());
+
+                true
+            }
+            ScheduleShowMsg::DistributeMovie(datetime) => {
+                let show = self.show.clone().unwrap();
+                let scheduled_date = DateTime::from_utc(NaiveDateTime::new(datetime.0, datetime.1), Utc);
+                let movie = Movie {
+                    release_date: show.first_air_date.unwrap_or(String::from("Unknown Release Date")),
+                    show_name: show.title.unwrap_or(String::from("Unknown Movie Title")),
+                    id: 0_usize,
+                    movie_id: show.id.parse().unwrap()
+                };
+
+
+                let scheduled_event = Vec::from([ScheduledEvent {
+                    scheduled_date,
+                    media_type: self.show.clone().unwrap().media_type,
+                    episode: None,
+                    movie: Some(movie)
+                }]);
+
+                let mut em = EventManager::create();
+                match em.add_events(scheduled_event) {
+                    Ok(_) => {
+                        self.schedule_show_state = ScheduleShowState::Loading;
+                        console_log!("BYNGER - Schedule Update Succeeded");
+                    }
+                    Err(e) => console_log!(format!("BYNGER - Schedule Update Failed - {}", e))
+                }
+
+                ctx.props().on_cancel.emit(MouseEvent::new("click").unwrap());
 
                 true
             }
@@ -434,6 +481,7 @@ impl Component for ScheduleShow {
                 });
             }
 
+            // Schedule our bucket of episodes
             ScheduleShowMsg::ScheduleEpisodes(episodes_to_schedule)
         });
 
@@ -473,13 +521,28 @@ impl Component for ScheduleShow {
             ScheduleShowMsg::DistributeEpisodes(schedule_bounds, schedule_options)
         });
 
+        let on_schedule_movie = ctx.link().callback( move |_| {
+            let raw_start_date = UiHelpers::get_value_from_input_by_id("#pickerDateStart").expect("Missing Start Date?");
+            let raw_start_time = UiHelpers::get_value_from_input_by_id("#pickerTimeStart").expect("Missing Start Time?");
+
+            let datetime_tuple = (
+                NaiveDate::parse_from_str(&raw_start_date, "%Y-%m-%d").expect("Bad start date format."),
+                NaiveTime::parse_from_str(&raw_start_time, "%H:%M").expect("Bad start time format.")
+            );
+
+            ScheduleShowMsg::DistributeMovie(datetime_tuple)
+
+        });
+
         let mut title = "Loading...".to_string();
         let mut subtitle = "".to_string();
+        let date_format = "%F"; // YYYY-MM-DD
+        let time_format = "%R"; // HH:
         let card_body = match self.schedule_show_state {
             ScheduleShowState::Loading => {
                 html!{<p>{"Loading..."}</p>}
             }
-            ScheduleShowState::EpisodePicker => {
+            ScheduleShowState::ShowPicker => {
                 let show = self.show.clone().unwrap();
                 title = show.title.unwrap_or_else(|| "Loading...".to_string());
                 // TODO: These should probably be broken down into their own component cards.
@@ -586,8 +649,6 @@ impl Component for ScheduleShow {
                 let days_of_week = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
                 let range_start = Local::now();
                 let range_end = range_start.add(Duration::weeks(4));
-                let date_format = "%F"; // YYYY-MM-DD
-                let time_format = "%R"; // HH:
                 let start_date_string = range_start.format(date_format).to_string();
                 let start_time_string = range_start.format(time_format).to_string();
                 let end_date_string = range_end.format(date_format).to_string();
@@ -726,6 +787,49 @@ impl Component for ScheduleShow {
                     </div>
                 }
             }
+            ScheduleShowState::MovieScheduler => {
+                title = self.show.clone().unwrap().title.unwrap();
+                let range_start = Local::now();
+                let start_date_string = range_start.format(date_format).to_string();
+                let start_time_string = range_start.format(time_format).to_string();
+
+                html!{
+                    <div>
+                        <form id="schedulerForm">
+                            <div class="box">
+                                <div>
+                                    <h1 class="is-size-4">{"Schedule For"}</h1>
+                                </div>
+                                // For whatever reason Bulma doesn't stylize date/time inputs. (lame)
+                                <div class="field mb-0 is-horizontal">
+                                    <div class="field-label is-normal">
+                                        <label class="label">{"Date"}</label>
+                                    </div>
+                                    <div class="field-body">
+                                        <div class="field">
+                                            <div class="control">
+                                                <input id="pickerDateStart" type="date" value={start_date_string} />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="field mb-0 is-horizontal">
+                                    <div class="field-label is-normal">
+                                        <label class="label">{"Time"}</label>
+                                    </div>
+                                    <div class="field-body">
+                                        <div class="field">
+                                            <div class="control">
+                                                <input id="pickerTimeStart" type="time" value={start_time_string} />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                }
+            }
         };
 
         html! {
@@ -743,11 +847,14 @@ impl Component for ScheduleShow {
                         {card_body}
                      </section>
                     <footer class="modal-card-foot pb-1 pt-1">
-                        if self.schedule_show_state == ScheduleShowState::EpisodePicker {
-                            <button class="button" onclick={&on_distribute}>{"Distribute Episodes"}</button>
+                        // TODO: Clean up, currently clunky.
+                        if self.schedule_show_state == ScheduleShowState::ShowPicker {
+                            <button class="button" onclick={&on_distribute}>{"Distribute"}</button>
                             // <button class="button control" onclick={on_cancel}>{"Cancel"}</button>
                         } if self.schedule_show_state == ScheduleShowState::EpisodeScheduler {
                             <button class="button" onclick={&on_schedule}>{"Schedule"}</button>
+                        } if self.schedule_show_state == ScheduleShowState::MovieScheduler {
+                            <button class="button" onclick={&on_schedule_movie}>{"Apply"}</button>
                         }
                     </footer>
                 </div>
@@ -758,7 +865,7 @@ impl Component for ScheduleShow {
     fn rendered(&mut self, _ctx: &Context<Self>, _first_render: bool) {
         match self.schedule_show_state {
             ScheduleShowState::Loading => {}
-            ScheduleShowState::EpisodePicker => {}
+            ScheduleShowState::ShowPicker => {}
             ScheduleShowState::EpisodeScheduler => {
                 // if self.range_picker.is_none() {
                 //     // attach always returns an array, we just want the first (and only) picker.
@@ -766,6 +873,7 @@ impl Component for ScheduleShow {
                 //     self.range_picker = Some(cal);
                 // }
             }
+            ScheduleShowState::MovieScheduler => {}
         }
     }
 }

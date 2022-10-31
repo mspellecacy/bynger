@@ -15,7 +15,7 @@ use yew::prelude::*;
 use crate::search_client::{MediaType, SearchResponse, TMDB};
 use crate::show_card::{Show, ShowCard};
 use crate::site_config::ByngerStore;
-use crate::schedule_show::ScheduleShow;
+use crate::schedule_show::{Episode, ScheduleShow};
 use crate::ui_helpers::UiHelpers;
 
 pub struct FindShow {
@@ -114,7 +114,8 @@ pub fn search_input(props: &SearchProps) -> Html {
         }, props.node_ref.clone())
     }
 
-    html! {
+    // If I dont use return here the linter complaints about returning () instead of Html
+    return html! {
           <div class="control has-icons-right">
             <input ref={props.node_ref.clone()}
             class="input" type="text" placeholder="Show Title" {value} {oninput} {onkeydown} />
@@ -298,6 +299,22 @@ impl Component for FindShow {
                                 Ok(res) => {
                                     let show = Show::from(res);
                                     FindShowMsg::ShowResult(show)
+
+                                    //let blap = Episode::from(show);
+
+                                    // let _test = Episode {
+                                    //     air_date: show.first_air_date.unwrap(),
+                                    //     episode_number: 1,
+                                    //     name: show.title.unwrap(),
+                                    //     id: show.id.parse().unwrap(),
+                                    //     season_number: 0,
+                                    //     still_path: show.poster,
+                                    //     episode_run_time: 0,
+                                    //     show_name: show.tagline.unwrap(),
+                                    //     show_id: 000
+                                    // };
+                                    //
+                                    // FindShowMsg::ShowSelected((show.id, MediaType::Movie))
                                 }
                                 Err(e) => {
                                     console_log!(e);
@@ -382,6 +399,8 @@ impl Component for FindShow {
                                 }
                             }
                         });
+
+                        // TODO: Add some sanity here so we dont generate 100+ page buttons.
                         let page_links = (1..=max).into_iter().map(|i| {
                             let is_current = if i == crr { "is-current" } else { "" };
                             let display_value = i;

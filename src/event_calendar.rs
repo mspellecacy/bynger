@@ -67,6 +67,54 @@ fn get_calendar_cells(date: &DateTime<Utc>) -> Vec<Option<NaiveDate>> {
     cells
 }
 
+fn formatted_event_line(se: &ScheduledEvent) -> Html {
+    // <span class="panel-icon">
+    //     <i class="gg-tv" aria-hidden="true"></i>
+    //     </span>
+    //     {&ev.scheduled_date.format("%R")}
+    // {" | "}
+    // {&ev.episode.as_ref().unwrap().show_name}
+    // {" - "}
+    // {&ev.episode.as_ref().unwrap().name}
+    //
+    let text_type = match se.media_type {
+        MediaType::Tv => {
+            let text = format!{" {} | {} - {}",
+                               se.scheduled_date.format("%R"),
+                               se.episode.as_ref().unwrap().show_name,
+                               se.episode.as_ref().unwrap().name };
+            let type_ = "gg-tv".to_string();
+
+            (text, type_)
+        }
+        MediaType::Movie => {
+            let text = format!{" {} | {}",
+                               se.scheduled_date.format("%R"),
+                               se.movie.as_ref().unwrap().show_name };
+            let type_ = "gg-film".to_string();
+
+            (text, type_)
+        }
+        MediaType::Actor => {
+            (String::from("Unknown Actor"), String::from("gg-boy"))
+        }
+        MediaType::Unknown => {
+            (String::from("Unknown Actor"), String::from("gg-danger"))
+        }
+    };
+
+
+
+    html!{
+        <>
+            <span class="panel-icon">
+                <i class={text_type.1} aria-hidden="true"></i>
+            </span>
+            {text_type.0}
+        </>
+    }
+}
+
 // TODO: Pretty sure the TimeZone management on this component is wonk.
 // TODO: Implement a configuration setting for what TimeZone to use by default for display.
 impl Component for EventCalendar {
@@ -132,9 +180,13 @@ impl Component for EventCalendar {
         });
 
         let em = EventManager::create();
-        let day_events: Vec<&ScheduledEvent> = em.events.iter()
+        // Must be mutable to sort after collection.
+        let mut day_events: Vec<&ScheduledEvent> = em.events.iter()
             .filter(|se| se.scheduled_date.date_naive() == dn )
             .collect();
+        // Sort our day's events by time...
+        day_events.sort_by(|a, b| a.scheduled_date.cmp(&b.scheduled_date));
+
         let cells = get_calendar_cells(&date);
         let cell_id_format = "%Y_%m_%d";
         let day_click = ctx.link().callback(move |me:MouseEvent| {
@@ -208,29 +260,15 @@ impl Component for EventCalendar {
                                         {&day.format("%A")}
                                     </div>
                                 </div>
-                                // <div>{&date.format("%A, %B %d %Y").to_string()}</div>
                             </div>
                             <div class="card-content pt-0">
                                 <div class="content">
-                                // <a class="panel-block is-active">
-                                //     <span class="panel-icon">
-                                //         <i class="gg-tv" aria-hidden="true"></i>
-                                //     </span>
-                                //     {"bulma"}
-                                // </a>
                                     <p class="subtitle">{"Schedule"}</p>
                                     {
                                         day_events.iter().map(|&ev| {
                                             html!{
                                                 <a class="panel-block schedule-item">
-                                                    <span class="panel-icon">
-                                                        <i class="gg-tv" aria-hidden="true"></i>
-                                                    </span>
-                                                    {&ev.scheduled_date.format("%R")}
-                                                    {" | "}
-                                                    {&ev.episode.as_ref().unwrap().show_name}
-                                                    {" - "}
-                                                    {&ev.episode.as_ref().unwrap().name}
+                                                    {formatted_event_line(ev)}
                                                 </a>
                                             }
                                         }).collect::<Html>()
