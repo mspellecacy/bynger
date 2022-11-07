@@ -2,45 +2,42 @@ use std::fmt::{Display, Formatter};
 use std::future::Future;
 use std::rc::Rc;
 
-use reqwasm::http::{Request};
+use futures::future::{join_all, try_join_all};
+use futures::TryFutureExt;
+use itertools::{fold, Itertools};
+use reqwasm::http::Request;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use std::thread;
 use std::time::Duration;
-use futures::future::{join_all, try_join_all};
-use futures::TryFutureExt;
-use itertools::{fold, Itertools};
 use web_sys::RequestMode;
 
-
 use weblog::{console_error, console_log};
-use yew::{Context};
-
-
+use yew::Context;
 
 use crate::FindShow;
 
 #[derive(Clone, PartialEq, Serialize, Deserialize, Hash, Eq)]
 pub enum MediaType {
-    Tv,
-    Movie,
-    Actor,
-    Unknown,
+    tv,
+    movie,
+    actor,
+    unknown,
 }
 
 impl Default for MediaType {
     fn default() -> Self {
-        Self::Unknown
+        Self::unknown
     }
 }
 
 impl From<MediaType> for String {
     fn from(mt: MediaType) -> Self {
         match mt {
-            MediaType::Tv => "tv",
-            MediaType::Movie => "movie",
-            MediaType::Actor => "actor",
-            MediaType::Unknown => "unknown",
+            MediaType::tv => "tv",
+            MediaType::movie => "movie",
+            MediaType::actor => "actor",
+            MediaType::unknown => "unknown",
         }
         .to_string()
     }
@@ -49,10 +46,10 @@ impl From<MediaType> for String {
 impl Display for MediaType {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let mt = match self {
-            MediaType::Tv => { "tv" }
-            MediaType::Movie => { "movie" }
-            MediaType::Actor => { "actor" }
-            MediaType::Unknown => { "unknown" }
+            MediaType::tv => "tv",
+            MediaType::movie => "movie",
+            MediaType::actor => "actor",
+            MediaType::unknown => "unknown",
         };
         write!(f, "{mt}")
     }
@@ -61,11 +58,11 @@ impl Display for MediaType {
 impl FromStr for MediaType {
     type Err = ();
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mt = match s {
-            "movie" => Self::Movie,
-            "tv" => Self::Tv,
-            "actor" => Self::Actor,
-            _ => Self::Unknown,
+        let mt = match s.to_lowercase().as_str() {
+            "movie" => Self::movie,
+            "tv" => Self::tv,
+            "actor" => Self::actor,
+            _ => Self::unknown,
         };
 
         Ok(mt)
@@ -158,7 +155,7 @@ pub struct TMDBResult {
     // -- Shared by TV&Movie, Actor also has a limited subset I dont really care about.
     id: usize,
     #[serde(default)]
-    media_type: String,
+    media_type: MediaType,
     #[serde(default)]
     genre_ids: Vec<usize>,
     #[serde(default)]
@@ -234,14 +231,13 @@ pub struct TMDBSeasonObj {
     #[serde(default)]
     pub season_number: usize,
     #[serde(default)]
-    pub episodes: Vec<TMDBEpisodeObj>
+    pub episodes: Vec<TMDBEpisodeObj>,
 }
-
 
 impl TMDB {
     pub fn new(api_key: String) -> Self {
         Self {
-           api_key: Rc::new(api_key)
+            api_key: Rc::new(api_key),
         }
     }
 
@@ -267,16 +263,11 @@ impl TMDB {
                         tsr.results
                             .into_iter()
                             // Should eventually support "actor"
-                            .filter(|p| {
-                                matches!(
-                                    MediaType::from(p.media_type.to_string()),
-                                    MediaType::Tv | MediaType::Movie
-                                )
-                            })
+                            .filter(|p| matches!(p.media_type, MediaType::tv | MediaType::movie))
                             .map(|r| SearchResult {
                                 id: r.id.to_string(),
                                 title: Some(r.title).get_or_insert(r.name).to_string(),
-                                media_type: MediaType::from(r.media_type),
+                                media_type: r.media_type,
                                 year: r.release_date,
                             })
                             .for_each(|s| out.push(s));
@@ -303,23 +294,18 @@ impl TMDB {
 
     pub async fn get_movie(&self, id: &String) -> Result<TMDBMovieObj, String> {
         let key = &self.api_key;
-        let url = format!(
-            "https://api.themoviedb.org/3/movie/{id}?api_key={key}&include_adult=false"
-        );
+        let url =
+            format!("https://api.themoviedb.org/3/movie/{id}?api_key={key}&include_adult=false");
         let res = Request::get(&url).send().await;
 
         match res {
-            Ok(r) => {
-                match r.json::<TMDBMovieObj>().await {
-                    Ok(m) => {
-                        Ok(m)
-                    }
-                    Err(e) => {
-                        console_error!(e.to_string());
-                        Err(e.to_string())
-                    }
+            Ok(r) => match r.json::<TMDBMovieObj>().await {
+                Ok(m) => Ok(m),
+                Err(e) => {
+                    console_error!(e.to_string());
+                    Err(e.to_string())
                 }
-            }
+            },
             Err(e) => {
                 console_error!(e.to_string());
                 Err(e.to_string())
@@ -329,8 +315,7 @@ impl TMDB {
 
     pub async fn get_tv(&self, id: &String) -> Result<TMDBTVObj, String> {
         let key = &self.api_key;
-        let url =
-            format!("https://api.themoviedb.org/3/tv/{id}?api_key={key}&include_adult=false");
+        let url = format!("https://api.themoviedb.org/3/tv/{id}?api_key={key}&include_adult=false");
         let res = Request::get(&url).send().await;
 
         match res {
@@ -359,13 +344,17 @@ impl TMDB {
         let url = format!("{base}{postfix}");
 
         match Request::get(&url).send().await {
-            Ok(res) => {
-                match res.json::<TMDBSeasonObj>().await {
-                    Ok(season) => Some(season),
-                    Err(e) => { console_log!(format!("Failed parsing JSON - {}", e)); None }
+            Ok(res) => match res.json::<TMDBSeasonObj>().await {
+                Ok(season) => Some(season),
+                Err(e) => {
+                    console_log!(format!("Failed parsing JSON - {}", e));
+                    None
                 }
+            },
+            Err(e) => {
+                console_log!(format!("Failed Season Request - {}", e));
+                None
             }
-            Err(e) => { console_log!(format!("Failed Season Request - {}", e)); None }
         }
     }
 
@@ -377,12 +366,11 @@ impl TMDB {
                     .map(|sn| async move {
                         let season = async { self.get_tv_season(id, sn).await };
                         match season.await {
-                            None => { Err("Bad Request") }
-                            Some(res) => {
-                               Ok(res)
-                            }
+                            None => Err("Bad Request"),
+                            Some(res) => Ok(res),
                         }
-                    }).collect();
+                    })
+                    .collect();
 
                 // let test = join_all(seasons).await.into_iter().fold_ok(Vec::<TMDBSeasonObj>::new(), |mut acc, se| {
                 //     acc.push(se);
@@ -392,10 +380,16 @@ impl TMDB {
 
                 match try_join_all(seasons).await {
                     Ok(seasons) => Some(seasons),
-                    Err(e) => { console_log!(format!("Failed TV Season Fetch Join - {}", e)); None }
+                    Err(e) => {
+                        console_log!(format!("Failed TV Season Fetch Join - {}", e));
+                        None
+                    }
                 }
             }
-            Err(e) => { console_log!(format!("Failed TV Season Fetch - {}", e)); None }
+            Err(e) => {
+                console_log!(format!("Failed TV Season Fetch - {}", e));
+                None
+            }
         }
     }
 }

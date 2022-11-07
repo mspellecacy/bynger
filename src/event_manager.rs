@@ -1,34 +1,29 @@
-use std::fmt::Error;
-use std::ops::Deref;
 use futures::TryFutureExt;
-use gloo::storage::{LocalStorage, Storage};
 use gloo::storage::errors::StorageError;
+use gloo::storage::{LocalStorage, Storage};
 use js_sys::Atomics::store;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::fmt::Error;
+use std::ops::Deref;
 use web_sys::RequestCache::Default;
 
-use weblog::console_log;
-use crate::ByngerStore;
-use crate::ByngerStore::ScheduledEvents;
 use crate::event_calendar::CalendarSchedulableEvent;
 use crate::events::ScheduledEvent;
+use crate::ByngerStore;
+use crate::ByngerStore::ScheduledEvents;
+use weblog::console_log;
 
 pub struct EventManager {
     storage: Box<String>,
-    pub events: Box<Vec<ScheduledEvent>>
+    pub events: Box<Vec<ScheduledEvent>>,
 }
 
 impl EventManager {
     pub(crate) fn create() -> Self {
         let storage = Box::new(format!("{}", ByngerStore::ScheduledEvents));
-        let events = Box::new(
-            LocalStorage::get(&*storage).unwrap_or(Vec::<ScheduledEvent>::new())
-        );
+        let events = Box::new(LocalStorage::get(&*storage).unwrap_or(Vec::<ScheduledEvent>::new()));
 
-        EventManager {
-            storage,
-            events
-        }
+        EventManager { storage, events }
     }
 
     fn add_event(&mut self, scheduled_event: ScheduledEvent) {
@@ -51,6 +46,4 @@ impl EventManager {
 
         self.store() // commit new schedule to LocalStorage
     }
-
 }
-

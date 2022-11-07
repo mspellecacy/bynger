@@ -1,26 +1,26 @@
 extern crate core;
 
-use gloo::storage::{LocalStorage, Storage};
 use gloo::storage::errors::StorageError;
+use gloo::storage::{LocalStorage, Storage};
 
 use yew::prelude::*;
 use yew_router::prelude::*;
 
-mod find_show;
-mod search_client;
-mod show_card;
-mod tv_card;
-mod schedule_show;
-mod site_config;
 mod episodes_picker;
 mod event_calendar;
-mod ui_helpers;
-mod events;
 mod event_manager;
+mod events;
+mod find_show;
+mod schedule_show;
+mod search_client;
+mod show_card;
+mod site_config;
+mod tv_card;
+mod ui_helpers;
 
+use crate::event_calendar::EventCalendar;
 use crate::find_show::FindShow;
 use crate::site_config::{ByngerStore, SiteConfig};
-use crate::event_calendar::EventCalendar;
 
 #[derive(Routable, PartialEq, Clone, Debug)]
 pub enum Route {
@@ -37,7 +37,7 @@ pub struct Bynger {
     api_key: Result<String, StorageError>,
 }
 pub enum ByngerMsg {
-    ToggleNav
+    ToggleNav,
 }
 
 impl Component for Bynger {
@@ -45,10 +45,11 @@ impl Component for Bynger {
     type Properties = ();
 
     fn create(ctx: &Context<Self>) -> Self {
-        let api_key: Result<String, StorageError> = LocalStorage::get(ByngerStore::TmdbApiKey.to_string());
+        let api_key: Result<String, StorageError> =
+            LocalStorage::get(ByngerStore::TmdbApiKey.to_string());
         Self {
             nav_open: false,
-            api_key
+            api_key,
         }
     }
 
@@ -107,7 +108,8 @@ impl Component for Bynger {
 }
 
 fn switch(routes: &Route) -> Html {
-    let api_key: Result<String, StorageError> = LocalStorage::get(ByngerStore::TmdbApiKey.to_string());
+    let api_key: Result<String, StorageError> =
+        LocalStorage::get(ByngerStore::TmdbApiKey.to_string());
 
     // Dont redirect if we're already going to config (otherwise infinite redirect)
     let main = if api_key.is_err() && routes != &Route::Config {

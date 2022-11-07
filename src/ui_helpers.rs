@@ -1,7 +1,6 @@
-
-use web_sys::{Event, HtmlElement, HtmlInputElement, InputEvent};
-use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen::UnwrapThrowExt;
+use wasm_bindgen::{JsCast, JsValue};
+use web_sys::{Event, HtmlElement, HtmlInputElement, InputEvent};
 
 pub struct UiHelpers;
 

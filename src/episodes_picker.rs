@@ -1,21 +1,20 @@
-
-use std::ops::{Not};
+use std::ops::Not;
 
 use itertools::Itertools;
 use web_sys::{Event, HtmlElement};
 
-use yew::prelude::*;
-use crate::schedule_show::{Season};
+use crate::schedule_show::Season;
 use crate::search_client::TMDB;
-use wasm_bindgen::{UnwrapThrowExt};
 use wasm_bindgen::JsCast;
+use wasm_bindgen::UnwrapThrowExt;
+use yew::prelude::*;
 
 #[derive(Clone, PartialEq)]
 pub enum EpisodePickerTab {
     // This will kinda do double-duty as state for this component.
     All,
     Some,
-    None
+    None,
 }
 
 pub struct EpisodePicker {
@@ -37,14 +36,13 @@ pub struct EpisodePickerProperties {
 fn get_thumbnail(path: Option<String>) -> Html {
     match TMDB::poster_path(path) {
         None => html! {},
-        Some(s) =>
-            html! {
-                <figure class="image">
-                    <div class="has-ratio" style="width:128px;">
-                        <img src={s} alt="Placeholder image" />
-                    </div>
-                </figure>
-            }
+        Some(s) => html! {
+            <figure class="image">
+                <div class="has-ratio" style="width:128px;">
+                    <img src={s} alt="Placeholder image" />
+                </div>
+            </figure>
+        },
     }
 }
 
@@ -65,21 +63,20 @@ impl Component for EpisodePicker {
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             EpisodePickerMsg::PickerTabChange(e) => {
-                let id = e.target().unwrap().dyn_into::<HtmlElement>().unwrap_throw().id();
+                let id = e
+                    .target()
+                    .unwrap()
+                    .dyn_into::<HtmlElement>()
+                    .unwrap_throw()
+                    .id();
                 let tab = id.split('_').collect::<Vec<&str>>().pop();
                 match tab {
                     Some(tab_name) => {
                         match tab_name.to_uppercase().as_str() {
-                            "ALL" => {
-                                self.episode_picker_tab = EpisodePickerTab::All
-                            }
-                            "SOME" => {
-                                self.episode_picker_tab = EpisodePickerTab::Some
-                            }
-                            "NONE" => {
-                                self.episode_picker_tab = EpisodePickerTab::None
-                            }
-                            _ => { }
+                            "ALL" => self.episode_picker_tab = EpisodePickerTab::All,
+                            "SOME" => self.episode_picker_tab = EpisodePickerTab::Some,
+                            "NONE" => self.episode_picker_tab = EpisodePickerTab::None,
+                            _ => {}
                         }
                         true
                     }
@@ -89,7 +86,7 @@ impl Component for EpisodePicker {
                     }
                 }
             }
-            EpisodePickerMsg::Working => { false }
+            EpisodePickerMsg::Working => false,
         }
     }
 
@@ -100,9 +97,9 @@ impl Component for EpisodePicker {
         let current_tab = &self.episode_picker_tab;
         let season_id_base = format!("season_{season_number}");
         let tab_id_base = format!("{season_id_base}_tab");
-        let tab_click = ctx.link().callback(move |me: MouseEvent| {
-            EpisodePickerMsg::PickerTabChange(Event::from(me))
-        });
+        let tab_click = ctx
+            .link()
+            .callback(move |me: MouseEvent| EpisodePickerMsg::PickerTabChange(Event::from(me)));
 
         match current_tab {
             EpisodePickerTab::Some => {

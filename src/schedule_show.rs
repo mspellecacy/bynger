@@ -1,41 +1,43 @@
+use chrono::{
+    DateTime, Datelike, Duration, Local, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Utc,
+};
+use futures::stream::iter;
+use futures::StreamExt;
+use gloo::console::console;
 use std::collections::HashMap;
 use std::ops::{Add, Deref};
 use std::rc::Rc;
 use std::str::FromStr;
-use chrono::{Datelike, DateTime, Duration, Local, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Utc};
-use futures::stream::iter;
-use futures::StreamExt;
-use gloo::console::console;
 
 use gloo::storage::{LocalStorage, Storage};
 use itertools::{fold, Itertools};
-use wasm_bindgen::JsValue;
 use wasm_bindgen::prelude::wasm_bindgen;
+use wasm_bindgen::JsValue;
 
 use web_sys::{Document, Element, HtmlElement, HtmlInputElement, Node, NodeList};
 
 use weblog::{console_error, console_info, console_log};
 use yew::prelude::*;
 
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use yew_router::prelude::*;
-use crate::search_client::{MediaType, TMDB, TMDBMovieObj};
-use crate::show_card::Show;
-use crate::site_config::ByngerStore;
 use crate::episodes_picker::EpisodePicker;
 use crate::event_calendar::CalendarSchedulableEvent;
 use crate::event_manager::EventManager;
 use crate::events::ScheduledEvent;
-use crate::Route::Schedule;
-use crate::schedule_show::ScheduleShowState::EpisodeScheduler;
-use crate::{Route, search_client, StorageError};
 use crate::find_show::FindShowMsg;
+use crate::schedule_show::ScheduleShowState::EpisodeScheduler;
+use crate::search_client::{MediaType, TMDBMovieObj, TMDB};
+use crate::show_card::Show;
+use crate::site_config::ByngerStore;
 use crate::ui_helpers::UiHelpers;
+use crate::Route::Schedule;
+use crate::{search_client, Route, StorageError};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use yew_router::prelude::*;
 
-#[wasm_bindgen(module="/js/helpers.js")]
+#[wasm_bindgen(module = "/js/helpers.js")]
 extern "C" {
     #[wasm_bindgen(js_name = bc_attach_shim)]
-    fn calendar_attach( selector: &str, options: &str) -> Vec<JsValue>;
+    fn calendar_attach(selector: &str, options: &str) -> Vec<JsValue>;
 
     #[wasm_bindgen(js_name = bc_value_shim)]
     fn calendar_range_value(cal: &JsValue) -> String;
@@ -67,7 +69,7 @@ pub struct Episode {
     pub season_number: usize,
     pub still_path: Option<String>,
     pub episode_run_time: usize, // in Minutes
-    pub show_name: String,  // For reference
+    pub show_name: String,       // For reference
     pub show_id: usize,
 }
 
@@ -79,7 +81,6 @@ pub struct Movie {
     pub movie_id: usize,
 }
 
-
 impl CalendarSchedulableEvent for Episode {
     fn id(&self) -> String {
         self.id.to_string()
@@ -90,7 +91,7 @@ impl CalendarSchedulableEvent for Episode {
     }
 
     fn media_type(&self) -> MediaType {
-        MediaType::Tv
+        MediaType::tv
     }
 
     fn description(&self) -> String {
@@ -110,7 +111,7 @@ pub struct Season {
     pub overview: Option<String>,
     pub poster_path: Option<String>,
     pub season_number: usize,
-    pub episodes: Option<Vec<Episode>>
+    pub episodes: Option<Vec<Episode>>,
 }
 
 #[derive(Clone, PartialEq)]
@@ -122,7 +123,9 @@ pub enum ScheduleShowState {
 }
 
 impl Default for ScheduleShowState {
-    fn default() -> Self { ScheduleShowState::Loading }
+    fn default() -> Self {
+        ScheduleShowState::Loading
+    }
 }
 #[derive(Clone)]
 pub struct ScheduleShow {
@@ -132,14 +135,14 @@ pub struct ScheduleShow {
     node_ref: NodeRef,
     schedule_show_state: ScheduleShowState,
     search_client: TMDB,
-    range_picker: Option<JsValue>
+    range_picker: Option<JsValue>,
 }
 
 #[derive(Clone, PartialEq, Properties)]
 pub struct ScheduleProps {
     pub show_id: String,
     pub media_type: MediaType,
-    pub on_cancel: Callback<MouseEvent>
+    pub on_cancel: Callback<MouseEvent>,
 }
 
 pub enum ScheduleShowMsg {
@@ -151,26 +154,24 @@ pub enum ScheduleShowMsg {
     SeasonsResult(Vec<Season>),
     ScheduleEpisodes(Vec<Episode>),
     DistributeEpisodes(SchedulingBoundaries, SchedulingOptions),
-    DistributeMovie((NaiveDate, NaiveTime))
+    DistributeMovie((NaiveDate, NaiveTime)),
 }
 
 fn get_thumbnail(path: Option<String>) -> Html {
     match TMDB::poster_path(path) {
         None => html! {},
-        Some(s) =>
-            html! {
-                <figure class="image">
-                    <div class="has-ratio" style="width:128px;">
-                        <img src={s} alt="Placeholder image" />
-                    </div>
-                </figure>
-            }
+        Some(s) => html! {
+            <figure class="image">
+                <div class="has-ratio" style="width:128px;">
+                    <img src={s} alt="Placeholder image" />
+                </div>
+            </figure>
+        },
     }
 }
 
-
 fn tv_schedule_body() -> Html {
- return html!{/* */};
+    return html! {/* */};
 }
 
 impl Component for ScheduleShow {
@@ -178,8 +179,9 @@ impl Component for ScheduleShow {
     type Properties = ScheduleProps;
 
     fn create(ctx: &Context<Self>) -> Self {
-        ctx.link().send_message(ScheduleShowMsg::FetchShow );
-        let api_key: String =  LocalStorage::get(ByngerStore::TmdbApiKey.to_string()).expect("Missing API Key");
+        ctx.link().send_message(ScheduleShowMsg::FetchShow);
+        let api_key: String =
+            LocalStorage::get(ByngerStore::TmdbApiKey.to_string()).expect("Missing API Key");
         Self {
             show: None,
             seasons: None,
@@ -193,7 +195,7 @@ impl Component for ScheduleShow {
 
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
-            ScheduleShowMsg::Working => { false }
+            ScheduleShowMsg::Working => false,
             ScheduleShowMsg::FetchShow => {
                 let props = ctx.props().clone();
                 let show_id = props.show_id;
@@ -201,33 +203,19 @@ impl Component for ScheduleShow {
                 let search_client = self.search_client.clone();
                 ctx.link().send_future(async move {
                     match media_type {
-                        MediaType::Tv => {
-                            match search_client.get_tv(&show_id).await {
-                                Ok(show) => {
-                                    ScheduleShowMsg::ShowResult(Show::from(show))
-                                }
-                                Err(e) => {
-                                    ScheduleShowMsg::Error(e)
-                                }
-                            }
-                        }
-                        MediaType::Movie => {
+                        MediaType::tv => match search_client.get_tv(&show_id).await {
+                            Ok(show) => ScheduleShowMsg::ShowResult(Show::from(show)),
+                            Err(e) => ScheduleShowMsg::Error(e),
+                        },
+                        MediaType::movie => {
                             match search_client.get_movie(&show_id).await {
-                                Ok(movie) => {
-                                    ScheduleShowMsg::ShowResult(Show::from(movie))
-                                }
-                                Err(e) => {
-                                    ScheduleShowMsg::Error(e)
-                                }
+                                Ok(movie) => ScheduleShowMsg::ShowResult(Show::from(movie)),
+                                Err(e) => ScheduleShowMsg::Error(e),
                             }
                             //ScheduleShowMsg::Working
                         }
-                        MediaType::Actor => {
-                            ScheduleShowMsg::Working
-                        }
-                        MediaType::Unknown => {
-                            ScheduleShowMsg::Working
-                        }
+                        MediaType::actor => ScheduleShowMsg::Working,
+                        MediaType::unknown => ScheduleShowMsg::Working,
                     }
                 });
                 false
@@ -238,49 +226,64 @@ impl Component for ScheduleShow {
                     None => {}
                     Some(show) => {
                         ctx.link().send_future(async move {
-                            let fuzzy_runtime_max = show.episode_run_time.as_ref().unwrap().iter().max().unwrap_or(&60_usize).to_owned();
+                            let fuzzy_runtime_max = show
+                                .episode_run_time
+                                .as_ref()
+                                .unwrap()
+                                .iter()
+                                .max()
+                                .unwrap_or(&60_usize)
+                                .to_owned();
                             //let fuzzy_runtime_max = Some(45_usize);
                             let seasons = search_client.get_seasons_episodes(&show.id).await;
                             match seasons {
-                                None => { ScheduleShowMsg::Error("Unknown".to_string()) }
+                                None => ScheduleShowMsg::Error("Unknown".to_string()),
                                 Some(s) => {
-                                    let seasons = s.into_iter().fold(Vec::<Season>::new(), |mut seasons, so| {
-                                        let eps = so.episodes.into_iter().fold(Vec::<Episode>::new(), |mut eps, ep| {
-                                            // If the episode comes with a runtime, use that, otherwise use the max length from the show level array.
-                                            // not exact and relies on an undocumented field returned from the API.
-                                            // TODO: In the the future a user-fudgable option for setting a default value would be nice.
-                                            let fuzzy_runtime = match ep.runtime {
-                                                None => { fuzzy_runtime_max }
-                                                Some(runtime) => { runtime }
-                                            };
-                                            eps.push(Episode {
-                                                air_date: ep.air_date.unwrap_or(String::from("unknown")),
-                                                episode_number: ep.episode_number,
-                                                name: ep.name,
-                                                id: ep.id,
-                                                season_number: ep.season_number,
-                                                still_path: ep.still_path,
-                                                episode_run_time: fuzzy_runtime,
-                                                show_name: show.clone().title.unwrap(),
-                                                show_id: (&show.id).parse().unwrap(),
+                                    let seasons = s.into_iter().fold(
+                                        Vec::<Season>::new(),
+                                        |mut seasons, so| {
+                                            let eps = so.episodes.into_iter().fold(
+                                                Vec::<Episode>::new(),
+                                                |mut eps, ep| {
+                                                    // If the episode comes with a runtime, use that, otherwise use the max length from the show level array.
+                                                    // not exact and relies on an undocumented field returned from the API.
+                                                    // TODO: In the the future a user-fudgable option for setting a default value would be nice.
+                                                    let fuzzy_runtime = match ep.runtime {
+                                                        None => fuzzy_runtime_max,
+                                                        Some(runtime) => runtime,
+                                                    };
+                                                    eps.push(Episode {
+                                                        air_date: ep
+                                                            .air_date
+                                                            .unwrap_or(String::from("unknown")),
+                                                        episode_number: ep.episode_number,
+                                                        name: ep.name,
+                                                        id: ep.id,
+                                                        season_number: ep.season_number,
+                                                        still_path: ep.still_path,
+                                                        episode_run_time: fuzzy_runtime,
+                                                        show_name: show.clone().title.unwrap(),
+                                                        show_id: (&show.id).parse().unwrap(),
+                                                    });
+
+                                                    // console_log!(format!("ep {}; runtime: {}.", ep.episode_number, fuzzy_runtime));
+                                                    eps
+                                                },
+                                            );
+
+                                            seasons.push(Season {
+                                                id: so.id,
+                                                air_date: so.air_date,
+                                                name: so.name,
+                                                overview: so.overview,
+                                                poster_path: so.poster_path,
+                                                season_number: so.season_number,
+                                                episodes: Some(eps),
                                             });
 
-                                            // console_log!(format!("ep {}; runtime: {}.", ep.episode_number, fuzzy_runtime));
-                                            eps
-                                        });
-
-                                        seasons.push(Season {
-                                            id: so.id,
-                                            air_date: so.air_date,
-                                            name: so.name,
-                                            overview: so.overview,
-                                            poster_path: so.poster_path,
-                                            season_number: so.season_number,
-                                            episodes: Some(eps)
-                                        });
-
-                                        seasons
-                                    });
+                                            seasons
+                                        },
+                                    );
 
                                     ScheduleShowMsg::SeasonsResult(seasons)
                                 }
@@ -295,16 +298,15 @@ impl Component for ScheduleShow {
                 self.show = Some(show.clone());
 
                 match show.media_type {
-                    MediaType::Tv => {
-                        ctx.link().send_future(async move {
-                            ScheduleShowMsg::FetchSeasons
-                        });
+                    MediaType::tv => {
+                        ctx.link()
+                            .send_future(async move { ScheduleShowMsg::FetchSeasons });
                     }
-                    MediaType::Movie => {
+                    MediaType::movie => {
                         self.schedule_show_state = ScheduleShowState::MovieScheduler;
                     }
-                    MediaType::Actor => {}
-                    MediaType::Unknown => {}
+                    MediaType::actor => {}
+                    MediaType::unknown => {}
                 }
 
                 true
@@ -330,11 +332,19 @@ impl Component for ScheduleShow {
                 let mut per_day = 0;
                 let upper_datetime = NaiveDateTime::new(bounds.end_date, bounds.end_time);
 
-                let scheduled_events= self.episodes_to_schedule.iter()
-                    .fold(Vec::<ScheduledEvent>::new(), |mut scheduled_events, ep| {
+                let scheduled_events = self.episodes_to_schedule.iter().fold(
+                    Vec::<ScheduledEvent>::new(),
+                    |mut scheduled_events, ep| {
                         // Check days_of_week and advance over any day not available to schedule.
-                        while !options.days_of_week.get(&(curr_date.weekday().num_days_from_monday())).unwrap() {
-                            curr_date = NaiveDateTime::new(curr_date.add(Duration::days(1)).date(), bounds.start_time);
+                        while !options
+                            .days_of_week
+                            .get(&(curr_date.weekday().num_days_from_monday()))
+                            .unwrap()
+                        {
+                            curr_date = NaiveDateTime::new(
+                                curr_date.add(Duration::days(1)).date(),
+                                bounds.start_time,
+                            );
                             per_day = 0;
                         }
 
@@ -343,14 +353,12 @@ impl Component for ScheduleShow {
                         }
 
                         // Push our current episode with the available date
-                        scheduled_events.push(
-                            ScheduledEvent {
-                                scheduled_date: DateTime::from_utc(curr_date, Utc),
-                                media_type: ep.media_type(),
-                                episode: Some(ep.to_owned()),
-                                movie: None
-                            }
-                        );
+                        scheduled_events.push(ScheduledEvent {
+                            scheduled_date: DateTime::from_utc(curr_date, Utc),
+                            media_type: ep.media_type(),
+                            episode: Some(ep.to_owned()),
+                            movie: None,
+                        });
 
                         // Advance our currently schedulable datetime by the episode's length
                         curr_date = curr_date.add(Duration::minutes(ep.episode_run_time as i64));
@@ -360,13 +368,17 @@ impl Component for ScheduleShow {
                         // if we've reached our max eps per day or advanced the time beyond the upper time boundary
                         // then advance the day and reset the counter
                         if per_day == options.eps_per_day || curr_date.time() > bounds.end_time {
-                            curr_date = NaiveDateTime::new(curr_date.add(Duration::days(1)).date(), bounds.start_time);
+                            curr_date = NaiveDateTime::new(
+                                curr_date.add(Duration::days(1)).date(),
+                                bounds.start_time,
+                            );
                             per_day = 0;
                         }
 
                         // Fold
                         scheduled_events
-                });
+                    },
+                );
 
                 // We should always schedule all eps.
                 assert_eq!(&self.episodes_to_schedule.len(), &scheduled_events.len());
@@ -383,31 +395,35 @@ impl Component for ScheduleShow {
                         self.schedule_show_state = ScheduleShowState::Loading;
                         console_log!("BYNGER - Schedule Update Succeeded");
                     }
-                    Err(e) => console_log!(format!("BYNGER - Schedule Update Failed - {}", e))
+                    Err(e) => console_log!(format!("BYNGER - Schedule Update Failed - {}", e)),
                 }
 
                 // Close our modal by re-using the on_cancel emitter by faking a mouse click.
                 // Hacky but effective.
-                ctx.props().on_cancel.emit(MouseEvent::new("click").unwrap());
+                ctx.props()
+                    .on_cancel
+                    .emit(MouseEvent::new("click").unwrap());
 
                 true
             }
             ScheduleShowMsg::DistributeMovie(datetime) => {
                 let show = self.show.clone().unwrap();
-                let scheduled_date = DateTime::from_utc(NaiveDateTime::new(datetime.0, datetime.1), Utc);
+                let scheduled_date =
+                    DateTime::from_utc(NaiveDateTime::new(datetime.0, datetime.1), Utc);
                 let movie = Movie {
-                    release_date: show.first_air_date.unwrap_or(String::from("Unknown Release Date")),
+                    release_date: show
+                        .first_air_date
+                        .unwrap_or(String::from("Unknown Release Date")),
                     show_name: show.title.unwrap_or(String::from("Unknown Movie Title")),
                     id: 0_usize,
-                    movie_id: show.id.parse().unwrap()
+                    movie_id: show.id.parse().unwrap(),
                 };
-
 
                 let scheduled_event = Vec::from([ScheduledEvent {
                     scheduled_date,
                     media_type: self.show.clone().unwrap().media_type,
                     episode: None,
-                    movie: Some(movie)
+                    movie: Some(movie),
                 }]);
 
                 let mut em = EventManager::create();
@@ -416,10 +432,12 @@ impl Component for ScheduleShow {
                         self.schedule_show_state = ScheduleShowState::Loading;
                         console_log!("BYNGER - Schedule Update Succeeded");
                     }
-                    Err(e) => console_log!(format!("BYNGER - Schedule Update Failed - {}", e))
+                    Err(e) => console_log!(format!("BYNGER - Schedule Update Failed - {}", e)),
                 }
 
-                ctx.props().on_cancel.emit(MouseEvent::new("click").unwrap());
+                ctx.props()
+                    .on_cancel
+                    .emit(MouseEvent::new("click").unwrap());
 
                 true
             }
@@ -431,7 +449,7 @@ impl Component for ScheduleShow {
         let seasons = self.seasons.clone();
         let props = ctx.props().clone();
         let _media_type = props.media_type;
-        let on_cancel = move |e| { props.on_cancel.emit(e) };
+        let on_cancel = move |e| props.on_cancel.emit(e);
         let on_distribute = ctx.link().callback(move |_| {
             // Bit of a brute force solution. I doubt its terribly performant, but I also doubt
             // anyone would actually notice given the scale we're working in.
@@ -448,8 +466,12 @@ impl Component for ScheduleShow {
                         if let Some(s) = season_num.get(1) {
                             if let Ok(season_as_usize) = usize::from_str(s) {
                                 if let Some(seas) = &seasons {
-                                    if let Some(found_season) = seas.iter().find(|&p| p.season_number == season_as_usize) {
-                                        episodes_to_schedule.append(&mut found_season.episodes.as_ref().unwrap().clone());
+                                    if let Some(found_season) =
+                                        seas.iter().find(|&p| p.season_number == season_as_usize)
+                                    {
+                                        episodes_to_schedule.append(
+                                            &mut found_season.episodes.as_ref().unwrap().clone(),
+                                        );
                                     }
                                 }
                             }
@@ -465,11 +487,15 @@ impl Component for ScheduleShow {
                         let ep_id = (HtmlElement::from(JsValue::from(node))).id();
                         let split_id: Vec<&str> = ep_id.split('_').collect(); // format: season_07_episode_14
                         if let (Some(sea_num), Some(ep_num)) = (split_id.get(1), split_id.get(3)) {
-                            if let (Ok(snum), Ok(enum_)) = (usize::from_str(sea_num), usize::from_str(ep_num)) {
+                            if let (Ok(snum), Ok(enum_)) =
+                                (usize::from_str(sea_num), usize::from_str(ep_num))
+                            {
                                 if let Some(seas) = &seasons {
                                     if let Some(s) = seas.iter().find(|s| s.season_number == snum) {
                                         if let Some(eps) = &s.episodes {
-                                            if let Some(ep) = eps.iter().find(|e| e.episode_number == enum_) {
+                                            if let Some(ep) =
+                                                eps.iter().find(|e| e.episode_number == enum_)
+                                            {
                                                 episodes_to_schedule.push(ep.clone());
                                             }
                                         }
@@ -486,52 +512,93 @@ impl Component for ScheduleShow {
         });
 
         // on_schedule does the work of distributing episodes with the user's desired criteria.
-        let on_schedule = ctx.link().callback( move |_| {
-            let raw_start_date = UiHelpers::get_value_from_input_by_id("#pickerDateStart").expect("Missing Start Date?");
-            let raw_start_time = UiHelpers::get_value_from_input_by_id("#pickerTimeStart").expect("Missing Start Time?");
-            let raw_end_time = UiHelpers::get_value_from_input_by_id("#pickerTimeEnd").expect("Missing End Time?");
-            let raw_end_date = UiHelpers::get_value_from_input_by_id("#pickerDateEnd").expect("Missing End Date?");
+        let on_schedule = ctx.link().callback(move |_| {
+            let raw_start_date = UiHelpers::get_value_from_input_by_id("#pickerDateStart")
+                .expect("Missing Start Date?");
+            let raw_start_time = UiHelpers::get_value_from_input_by_id("#pickerTimeStart")
+                .expect("Missing Start Time?");
+            let raw_end_time =
+                UiHelpers::get_value_from_input_by_id("#pickerTimeEnd").expect("Missing End Time?");
+            let raw_end_date =
+                UiHelpers::get_value_from_input_by_id("#pickerDateEnd").expect("Missing End Date?");
 
             let schedule_bounds = SchedulingBoundaries {
-                start_date: NaiveDate::parse_from_str(&raw_start_date, "%Y-%m-%d").expect("Bad start date format."),
-                start_time: NaiveTime::parse_from_str(&raw_start_time, "%H:%M").expect("Bad start time format."),
-                end_date: NaiveDate::parse_from_str(&raw_end_date, "%Y-%m-%d").expect("Bad end date format."),
-                end_time: NaiveTime::parse_from_str(&raw_end_time, "%H:%M").expect("Bad end time format.")
+                start_date: NaiveDate::parse_from_str(&raw_start_date, "%Y-%m-%d")
+                    .expect("Bad start date format."),
+                start_time: NaiveTime::parse_from_str(&raw_start_time, "%H:%M")
+                    .expect("Bad start time format."),
+                end_date: NaiveDate::parse_from_str(&raw_end_date, "%Y-%m-%d")
+                    .expect("Bad end date format."),
+                end_time: NaiveTime::parse_from_str(&raw_end_time, "%H:%M")
+                    .expect("Bad end time format."),
             };
 
             // 0 = Monday ... 6 = Sunday.
             // Mirrors: https://docs.rs/chrono/latest/chrono/enum.Weekday.html#method.num_days_from_monday
             let dows = HashMap::from([
-                (0, UiHelpers::get_value_from_checkbox_by_id("#checkbox_dow_Monday").expect("Missing dow")),
-                (1, UiHelpers::get_value_from_checkbox_by_id("#checkbox_dow_Tuesday").expect("Missing dow")),
-                (2, UiHelpers::get_value_from_checkbox_by_id("#checkbox_dow_Wednesday").expect("Missing dow")),
-                (3, UiHelpers::get_value_from_checkbox_by_id("#checkbox_dow_Thursday").expect("Missing dow")),
-                (4, UiHelpers::get_value_from_checkbox_by_id("#checkbox_dow_Friday").expect("Missing dow")),
-                (5, UiHelpers::get_value_from_checkbox_by_id("#checkbox_dow_Saturday").expect("Missing dow")),
-                (6, UiHelpers::get_value_from_checkbox_by_id("#checkbox_dow_Sunday").expect("Missing dow")),
+                (
+                    0,
+                    UiHelpers::get_value_from_checkbox_by_id("#checkbox_dow_Monday")
+                        .expect("Missing dow"),
+                ),
+                (
+                    1,
+                    UiHelpers::get_value_from_checkbox_by_id("#checkbox_dow_Tuesday")
+                        .expect("Missing dow"),
+                ),
+                (
+                    2,
+                    UiHelpers::get_value_from_checkbox_by_id("#checkbox_dow_Wednesday")
+                        .expect("Missing dow"),
+                ),
+                (
+                    3,
+                    UiHelpers::get_value_from_checkbox_by_id("#checkbox_dow_Thursday")
+                        .expect("Missing dow"),
+                ),
+                (
+                    4,
+                    UiHelpers::get_value_from_checkbox_by_id("#checkbox_dow_Friday")
+                        .expect("Missing dow"),
+                ),
+                (
+                    5,
+                    UiHelpers::get_value_from_checkbox_by_id("#checkbox_dow_Saturday")
+                        .expect("Missing dow"),
+                ),
+                (
+                    6,
+                    UiHelpers::get_value_from_checkbox_by_id("#checkbox_dow_Sunday")
+                        .expect("Missing dow"),
+                ),
             ]);
-            let raw_epd = UiHelpers::get_value_from_input_by_id("#episodesPerDay").expect("Missing Eps Per Day?");
-            let raw_ued = UiHelpers::get_value_from_checkbox_by_id("#checkbox_use_end_date").expect("Missing use end date.");
+            let raw_epd = UiHelpers::get_value_from_input_by_id("#episodesPerDay")
+                .expect("Missing Eps Per Day?");
+            let raw_ued = UiHelpers::get_value_from_checkbox_by_id("#checkbox_use_end_date")
+                .expect("Missing use end date.");
             let schedule_options = SchedulingOptions {
                 days_of_week: dows,
                 eps_per_day: raw_epd.parse::<usize>().expect("Bad eps per day value"),
-                use_end_date: raw_ued
+                use_end_date: raw_ued,
             };
 
             ScheduleShowMsg::DistributeEpisodes(schedule_bounds, schedule_options)
         });
 
-        let on_schedule_movie = ctx.link().callback( move |_| {
-            let raw_start_date = UiHelpers::get_value_from_input_by_id("#pickerDateStart").expect("Missing Start Date?");
-            let raw_start_time = UiHelpers::get_value_from_input_by_id("#pickerTimeStart").expect("Missing Start Time?");
+        let on_schedule_movie = ctx.link().callback(move |_| {
+            let raw_start_date = UiHelpers::get_value_from_input_by_id("#pickerDateStart")
+                .expect("Missing Start Date?");
+            let raw_start_time = UiHelpers::get_value_from_input_by_id("#pickerTimeStart")
+                .expect("Missing Start Time?");
 
             let datetime_tuple = (
-                NaiveDate::parse_from_str(&raw_start_date, "%Y-%m-%d").expect("Bad start date format."),
-                NaiveTime::parse_from_str(&raw_start_time, "%H:%M").expect("Bad start time format.")
+                NaiveDate::parse_from_str(&raw_start_date, "%Y-%m-%d")
+                    .expect("Bad start date format."),
+                NaiveTime::parse_from_str(&raw_start_time, "%H:%M")
+                    .expect("Bad start time format."),
             );
 
             ScheduleShowMsg::DistributeMovie(datetime_tuple)
-
         });
 
         let mut title = "Loading...".to_string();
@@ -540,16 +607,20 @@ impl Component for ScheduleShow {
         let time_format = "%R"; // HH:
         let card_body = match self.schedule_show_state {
             ScheduleShowState::Loading => {
-                html!{<p>{"Loading..."}</p>}
+                html! {<p>{"Loading..."}</p>}
             }
             ScheduleShowState::ShowPicker => {
                 let show = self.show.clone().unwrap();
                 title = show.title.unwrap_or_else(|| "Loading...".to_string());
                 // TODO: These should probably be broken down into their own component cards.
                 match show.media_type {
-                    MediaType::Tv => {
+                    MediaType::tv => {
                         let seas = self.seasons.clone().expect("Missing Seasons");
-                        subtitle = format!("First Aired: {} | Seasons: {}", show.first_air_date.unwrap(), show.number_of_seasons.unwrap());
+                        subtitle = format!(
+                            "First Aired: {} | Seasons: {}",
+                            show.first_air_date.unwrap(),
+                            show.number_of_seasons.unwrap()
+                        );
 
                         let seasons = seas.into_iter().fold(Vec::<Html>::new(), |mut acc, s| {
                             // FIXME: Feels like there should be a better way, but I dont know.
@@ -598,19 +669,25 @@ impl Component for ScheduleShow {
 
                             acc  // Fold in season
                         }); // EpisodePicker
-                        html!{
+                        html! {
                             {for seasons}
                         }
                     }
-                    MediaType::Movie => {
+                    MediaType::movie => {
                         subtitle = format!("Released: {}", show.first_air_date.as_ref().unwrap());
                         let overview_max_len = 300;
                         let poster_fragment = get_thumbnail(show.poster.clone());
-                        let overview = show.overview.clone().unwrap_or_else(|| String::from("No Overview"));
+                        let overview = show
+                            .overview
+                            .clone()
+                            .unwrap_or_else(|| String::from("No Overview"));
                         let overview_long = || overview.len() > overview_max_len;
-                        let air_date = show.first_air_date.clone().unwrap_or_else(|| String::from("Missing Air Date"));
+                        let air_date = show
+                            .first_air_date
+                            .clone()
+                            .unwrap_or_else(|| String::from("Missing Air Date"));
 
-                        html!{
+                        html! {
                             <div class="card card-season mb-3">
                                 <div class="card-content pb-0 pt-1 pr-0 pl-0">
                                     <div class="media mb-1">
@@ -636,25 +713,37 @@ impl Component for ScheduleShow {
                             </div>
                         }
                     }
-                    MediaType::Actor => { html!{<p>{"Im an actor!"}</p>} }
-                    MediaType::Unknown => { html!{<p>{"Im an unknown!"}</p>} }
+                    MediaType::actor => {
+                        html! {<p>{"Im an actor!"}</p>}
+                    }
+                    MediaType::unknown => {
+                        html! {<p>{"Im an unknown!"}</p>}
+                    }
                 }
-
-
-
             }
             ScheduleShowState::EpisodeScheduler => {
                 // TODO: Most of these options could have user-defined defaults
                 title = format!("{} Episodes to Distribute", self.episodes_to_schedule.len());
-                let days_of_week = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+                let days_of_week = [
+                    "Monday",
+                    "Tuesday",
+                    "Wednesday",
+                    "Thursday",
+                    "Friday",
+                    "Saturday",
+                    "Sunday",
+                ];
                 let range_start = Local::now();
                 let range_end = range_start.add(Duration::weeks(4));
                 let start_date_string = range_start.format(date_format).to_string();
                 let start_time_string = range_start.format(time_format).to_string();
                 let end_date_string = range_end.format(date_format).to_string();
-                let end_time_string = range_end.add(Duration::hours(2)).format(time_format).to_string();
+                let end_time_string = range_end
+                    .add(Duration::hours(2))
+                    .format(time_format)
+                    .to_string();
 
-                html!{
+                html! {
                     <div>
                     <form id="schedulerForm">
                     <div class="box">
@@ -793,7 +882,7 @@ impl Component for ScheduleShow {
                 let start_date_string = range_start.format(date_format).to_string();
                 let start_time_string = range_start.format(time_format).to_string();
 
-                html!{
+                html! {
                     <div>
                         <form id="schedulerForm">
                             <div class="box">

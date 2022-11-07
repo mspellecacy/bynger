@@ -1,12 +1,12 @@
+use crate::search_client::{MediaType, SearchClient, TMDBMovieObj, TMDBTVObj, TMDB};
 use std::fmt::Display;
-use crate::search_client::{MediaType, SearchClient, TMDB, TMDBMovieObj, TMDBTVObj};
-use weblog::{console_error};
+use weblog::console_error;
 use yew::prelude::*;
 
 #[derive(Default, Clone, PartialEq, Properties)]
 pub struct Show {
-    pub id: String, // tmdb/tv: id
-    pub title: Option<String>, // tmdb/tv: name
+    pub id: String,                     // tmdb/tv: id
+    pub title: Option<String>,          // tmdb/tv: name
     pub original_title: Option<String>, // tmdb/tv: original_name
     pub first_air_date: Option<String>,
     pub poster: Option<String>,
@@ -35,7 +35,7 @@ impl From<TMDBTVObj> for Show {
             original_title: t.original_name,
             first_air_date: t.first_air_date,
             poster: TMDB::poster_path(poster),
-            media_type: MediaType::Tv,
+            media_type: MediaType::tv,
             episode_run_time: Some(t.episode_run_time),
             last_air_date: t.last_air_date,
             number_of_episodes: Some(t.number_of_episodes),
@@ -64,7 +64,7 @@ impl From<TMDBMovieObj> for Show {
             original_title: m.original_title,
             first_air_date: m.release_date,
             poster: TMDB::poster_path(poster),
-            media_type: MediaType::Movie,
+            media_type: MediaType::movie,
             episode_run_time: Some(vec![m.runtime.unwrap_or(0)]),
             last_air_date: None,
             in_production: false,
@@ -76,10 +76,8 @@ impl From<TMDBMovieObj> for Show {
     }
 }
 
-
 #[derive(Default, Clone)]
-pub struct ShowCard {
-}
+pub struct ShowCard {}
 
 pub enum ShowCardMsg {
     Loading,
@@ -102,16 +100,12 @@ pub struct ShowCardProps {
 impl ShowCard {
     fn get_thumbnail(path: Option<String>) -> Html {
         let thumb = match path {
-            None => {
-                html! {}
-            }
-            Some(s) => {
-                html! {
-                    <figure class="image is-2by3">
-                        <img class="is-radiusless" src={s} alt="Placeholder image" />
-                    </figure>
-                }
-            }
+            None => html! {},
+            Some(s) => html! {
+                <figure class="image is-2by3">
+                    <img class="is-radiusless" src={s} alt="Placeholder image" />
+                </figure>
+            },
         };
 
         thumb
@@ -120,7 +114,7 @@ impl ShowCard {
     fn value_into_pair<T: Display>(name: &str, item: &Option<T>) -> Html {
         let nbsp = '\u{00a0}'.to_string();
         let template = move |k, v| -> Html {
-            let out = html!{
+            let out = html! {
                 <p class="level">
                     <span class="show-item has-text-weight-semibold">{k}</span>
                     <span class="show-item">{v}</span>
@@ -133,11 +127,9 @@ impl ShowCard {
         match item {
             // None => html!{ <p class="level"><span class="show-item">{'\u{00a0}'}</span></p> },
             None => template(&nbsp, &nbsp),
-            Some(val) => template(&name.to_string(), &val.to_string())
+            Some(val) => template(&name.to_string(), &val.to_string()),
         }
-
     }
-
 }
 
 impl Component for ShowCard {
@@ -145,7 +137,7 @@ impl Component for ShowCard {
     type Properties = ShowCardProps;
 
     fn create(ctx: &Context<Self>) -> Self {
-        Self { }
+        Self {}
     }
 
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
@@ -160,7 +152,10 @@ impl Component for ShowCard {
                 false
             }
             ShowCardMsg::ShowClicked => {
-                let _out = (ctx.props().show.id.clone(), ctx.props().show.media_type.clone());
+                let _out = (
+                    ctx.props().show.id.clone(),
+                    ctx.props().show.media_type.clone(),
+                );
                 ctx.props().onclick.emit(_out);
                 false
             }

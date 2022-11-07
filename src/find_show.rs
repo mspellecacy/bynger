@@ -1,21 +1,20 @@
-use std::collections::HashMap;
-use std::str::FromStr;
 use futures::StreamExt;
 use gloo::storage::{LocalStorage, Storage};
 use itertools::Itertools;
+use std::collections::HashMap;
+use std::str::FromStr;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::UnwrapThrowExt;
-use web_sys::{HtmlInputElement};
+use web_sys::Event;
+use web_sys::HtmlInputElement;
 use web_sys::InputEvent;
-use web_sys::{Event};
 use weblog::{console_info, console_log};
 use yew::prelude::*;
 
-
+use crate::schedule_show::{Episode, ScheduleShow};
 use crate::search_client::{MediaType, SearchResponse, TMDB};
 use crate::show_card::{Show, ShowCard};
 use crate::site_config::ByngerStore;
-use crate::schedule_show::{Episode, ScheduleShow};
 use crate::ui_helpers::UiHelpers;
 
 pub struct FindShow {
@@ -90,7 +89,6 @@ pub fn search_input(props: &SearchProps) -> Html {
         node_ref: _,
     } = props.clone();
 
-
     let oninput = Callback::from(move |ie: InputEvent| {
         let event: Event = ie.dyn_into().unwrap_throw();
         let event_target = event.target().unwrap_throw();
@@ -106,12 +104,15 @@ pub fn search_input(props: &SearchProps) -> Html {
     );
 
     {
-        use_effect_with_deps(move |node_ref| {
-            if let Some(input) = node_ref.cast::<HtmlInputElement>() {
-                input.focus();
-            }
-            || ()
-        }, props.node_ref.clone())
+        use_effect_with_deps(
+            move |node_ref| {
+                if let Some(input) = node_ref.cast::<HtmlInputElement>() {
+                    input.focus();
+                }
+                || ()
+            },
+            props.node_ref.clone(),
+        )
     }
 
     // If I dont use return here the linter complaints about returning () instead of Html
@@ -123,16 +124,16 @@ pub fn search_input(props: &SearchProps) -> Html {
                 <i class="gg-search"></i>
             </span>
           </div>
-    }
+    };
 }
 
 #[derive(Clone, PartialEq, Properties)]
 pub struct SearchResultsProps {
-    pub show_selected: Callback<(String, MediaType)>,   // returns id/type on item click.
-    pub page_request: Callback<usize>,                  // Returns the number of the page requested.
-    pub shows: HashMap<usize, Show>,                    // Collection of Shows
-    #[prop_or(3)]                                       // Default to 3-wide
-    pub columns: usize,                                 // N-columns to group by.
+    pub show_selected: Callback<(String, MediaType)>, // returns id/type on item click.
+    pub page_request: Callback<usize>,                // Returns the number of the page requested.
+    pub shows: HashMap<usize, Show>,                  // Collection of Shows
+    #[prop_or(3)] // Default to 3-wide
+    pub columns: usize, // N-columns to group by.
 }
 
 #[function_component(SearchResults)]
@@ -146,22 +147,21 @@ pub fn search_results(props: &SearchResultsProps) -> Html {
         .chunks(props.columns)
         .into_iter()
         .map(|chunks| {
-            let columns = chunks
-                .into_iter()
-                .fold(Vec::new(), |mut acc, r| {
-                    if let Some(s) = props.shows.get(&r){
-                        acc.push(html! {
-                            <div key={s.id.clone()} class={col_is.to_owned()}>
-                                <ShowCard show={s.to_owned()} onclick={&onclick} />
-                            </div>
-                        });
-                    }
+            let columns = chunks.into_iter().fold(Vec::new(), |mut acc, r| {
+                if let Some(s) = props.shows.get(&r) {
+                    acc.push(html! {
+                        <div key={s.id.clone()} class={col_is.to_owned()}>
+                            <ShowCard show={s.to_owned()} onclick={&onclick} />
+                        </div>
+                    });
+                }
 
-                    acc
+                acc
             });
 
-            html!{ <div class="columns"> {for columns } </div> }
-       }).collect::<Html>()
+            html! { <div class="columns"> {for columns } </div> }
+        })
+        .collect::<Html>()
 }
 
 impl Component for FindShow {
@@ -169,7 +169,8 @@ impl Component for FindShow {
     type Properties = ();
 
     fn create(_ctx: &Context<Self>) -> Self {
-        let api_key: String =  LocalStorage::get(ByngerStore::TmdbApiKey.to_string()).expect("Missing API Key");
+        let api_key: String =
+            LocalStorage::get(ByngerStore::TmdbApiKey.to_string()).expect("Missing API Key");
         Self {
             modal_state: Default::default(),
             search_client: TMDB::new(api_key),
@@ -207,11 +208,9 @@ impl Component for FindShow {
                 let cp = self.current_page;
                 let sc = self.search_client.clone();
                 ctx.link().send_future(async move {
-                    let res =  sc.search_title(&sv, &cp).await;
+                    let res = sc.search_title(&sv, &cp).await;
                     match res {
-                        Ok(sr) => {
-                            FindShowMsg::SearchComplete(sr)
-                        },
+                        Ok(sr) => FindShowMsg::SearchComplete(sr),
                         Err(_) => FindShowMsg::Working,
                     }
                 });
@@ -220,11 +219,14 @@ impl Component for FindShow {
             FindShowMsg::Working => false,
             FindShowMsg::SearchComplete(res) => {
                 let cache = &mut self.show_cache;
-                res.clone().results.into_iter()
+                res.clone()
+                    .results
+                    .into_iter()
                     .map(|r| (r.id, r.media_type))
                     .filter(|p| !cache.contains_key(p))
                     .for_each(|r| {
-                        ctx.link().send_future(async move { FindShowMsg::GetShow(r)})
+                        ctx.link()
+                            .send_future(async move { FindShowMsg::GetShow(r) })
                     });
 
                 self.current_page = Some(res.page);
@@ -279,8 +281,8 @@ impl Component for FindShow {
                 let (id, mt) = req;
                 let sc = self.search_client.clone();
                 match mt {
-                    MediaType::Tv => {
-                        ctx.link().send_future( async move {
+                    MediaType::tv => {
+                        ctx.link().send_future(async move {
                             match sc.get_tv(&id).await {
                                 Ok(res) => {
                                     let show = Show::from(res);
@@ -293,8 +295,8 @@ impl Component for FindShow {
                             }
                         });
                     }
-                    MediaType::Movie => {
-                        ctx.link().send_future( async move {
+                    MediaType::movie => {
+                        ctx.link().send_future(async move {
                             match sc.get_movie(&id).await {
                                 Ok(res) => {
                                     let show = Show::from(res);
@@ -344,12 +346,12 @@ impl Component for FindShow {
             .callback(|(id, media_type)| FindShowMsg::ShowSelected((id, media_type)));
         let page_request = ctx.link().callback(FindShowMsg::PageRequest);
         let find_show_fragment = html! {
-                <div class="box">
-                    <div class="control">
-                        <button class="button" {onclick}>{ "Find Show" }</button>
-                    </div>
+            <div class="box">
+                <div class="control">
+                    <button class="button" {onclick}>{ "Find Show" }</button>
                 </div>
-            };
+            </div>
+        };
 
         match self.modal_state {
             FindShowModalState::Closed => find_show_fragment as Html,
@@ -442,9 +444,9 @@ impl Component for FindShow {
 
                 let search_content = match have_response {
                     Some(r) => {
-
-                        let shows = r.results.clone().into_iter()
-                            .fold(HashMap::<usize, Show>::new(), |mut acc, r| {
+                        let shows = r.results.clone().into_iter().fold(
+                            HashMap::<usize, Show>::new(),
+                            |mut acc, r| {
                                 let key = acc.len();
                                 let show = self.show_cache.get(&(r.id, r.media_type));
                                 match show {
@@ -455,7 +457,8 @@ impl Component for FindShow {
                                 }
 
                                 acc
-                            });
+                            },
+                        );
                         html! { <SearchResults {show_selected} {page_request} columns=4 shows={shows} /> }
                     }
                     None => {

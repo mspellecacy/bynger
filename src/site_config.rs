@@ -1,5 +1,5 @@
-use std::fmt::{Display, Formatter};
 use chrono::{DateTime, Utc};
+use std::fmt::{Display, Formatter};
 
 use gloo::storage::{LocalStorage, Storage};
 
@@ -19,17 +19,17 @@ impl Display for ByngerStore {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let prefix = "BYNGER";
         let name = match self {
-            ByngerStore::TmdbApiKey => { "TMDB_API_KEY" }
-            ByngerStore::ScheduledEvents => { "SCHEDULED_EVENTS" }
+            ByngerStore::TmdbApiKey => "TMDB_API_KEY",
+            ByngerStore::ScheduledEvents => "SCHEDULED_EVENTS",
         };
-        write!(f,"{prefix}_{name}")
+        write!(f, "{prefix}_{name}")
     }
 }
 
 #[derive(Clone, PartialEq)]
 pub struct SiteConfig {
     tmdb_api_key: Option<String>,
-    schedule_entries: Option<Vec<String>>
+    schedule_entries: Option<Vec<String>>,
 }
 
 pub enum SiteConfigMsg {
@@ -42,12 +42,16 @@ impl Component for SiteConfig {
     type Properties = ();
 
     fn create(ctx: &Context<Self>) -> Self {
-        let tmdb_api_key = LocalStorage::get(ByngerStore::TmdbApiKey.to_string()).unwrap_or_default();
-        let schedule_entries = Some(LocalStorage::get(ByngerStore::ScheduledEvents.to_string()).unwrap_or_else(|_| Vec::new()));
+        let tmdb_api_key =
+            LocalStorage::get(ByngerStore::TmdbApiKey.to_string()).unwrap_or_default();
+        let schedule_entries = Some(
+            LocalStorage::get(ByngerStore::ScheduledEvents.to_string())
+                .unwrap_or_else(|_| Vec::new()),
+        );
 
         Self {
             tmdb_api_key,
-            schedule_entries
+            schedule_entries,
         }
     }
 
@@ -58,10 +62,17 @@ impl Component for SiteConfig {
                 false
             }
             SiteConfigMsg::Save => {
-                let stored = LocalStorage::set(ByngerStore::TmdbApiKey.to_string(), self.tmdb_api_key.clone());
+                let stored = LocalStorage::set(
+                    ByngerStore::TmdbApiKey.to_string(),
+                    self.tmdb_api_key.clone(),
+                );
                 match stored {
-                    Ok(_) => { console_info!("Bynger || API Key Stored"); }
-                    Err(_) => { console_error!("Bynger || Error storing API Key"); }
+                    Ok(_) => {
+                        console_info!("Bynger || API Key Stored");
+                    }
+                    Err(_) => {
+                        console_error!("Bynger || Error storing API Key");
+                    }
                 }
                 true
             }

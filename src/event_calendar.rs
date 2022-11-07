@@ -1,8 +1,8 @@
-use std::ops::{Sub};
-use chrono::{Datelike, DateTime, Duration, NaiveDate, NaiveTime, TimeZone, Utc};
 use chrono::format::Fixed::TimezoneOffset;
+use chrono::{DateTime, Datelike, Duration, NaiveDate, NaiveTime, TimeZone, Utc};
 use gloo::console::console;
 use itertools::Itertools;
+use std::ops::Sub;
 
 use serde::{Deserialize, Deserializer};
 use weblog::console_log;
@@ -22,12 +22,6 @@ pub trait CalendarSchedulableEvent {
     fn duration(&self) -> usize; // in minutes
 }
 
-// impl Deserialize for dyn CalendarSchedulableEvent {
-//     fn deserialize<'a, D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'a> {
-//         todo!()
-//     }
-// }
-
 pub struct EventCalendar {
     active_day: DateTime<Utc>,
     active_month: DateTime<Utc>,
@@ -35,7 +29,7 @@ pub struct EventCalendar {
 
 pub enum EventCalendarMsg {
     ChangeDate(DateTime<Utc>),
-    ChangeDay(DateTime<Utc>)
+    ChangeDay(DateTime<Utc>),
 }
 
 #[derive(Clone, PartialEq, Properties)]
@@ -52,66 +46,59 @@ fn get_calendar_cells(date: &DateTime<Utc>) -> Vec<Option<NaiveDate>> {
     let month = date.month();
     let month_start = NaiveDate::from_ymd(year, month, 1);
     let month_start_from_monday = month_start.weekday().number_from_monday();
-    let month_end = match month+1 == 13 {
+    let month_end = match month + 1 == 13 {
         true => NaiveDate::from_ymd(year, 12, 31),
-        false => NaiveDate::from_ymd(year, month+1, 1).sub(Duration::days(1))
+        false => NaiveDate::from_ymd(year, month + 1, 1).sub(Duration::days(1)),
     };
 
     // start cell padding.
-    for _ in 1..month_start_from_monday { cells.push(None); }
+    for _ in 1..month_start_from_monday {
+        cells.push(None);
+    }
     // insert days...
-    for day_number in 1..=month_end.day() { cells.push(Some(NaiveDate::from_ymd(year, month, day_number))); }
+    for day_number in 1..=month_end.day() {
+        cells.push(Some(NaiveDate::from_ymd(year, month, day_number)));
+    }
     // end cell padding
-    while cells.len()%7 != 0 { cells.push(None); }
+    while cells.len() % 7 != 0 {
+        cells.push(None);
+    }
 
     cells
 }
 
 fn formatted_event_line(se: &ScheduledEvent) -> Html {
-    // <span class="panel-icon">
-    //     <i class="gg-tv" aria-hidden="true"></i>
-    //     </span>
-    //     {&ev.scheduled_date.format("%R")}
-    // {" | "}
-    // {&ev.episode.as_ref().unwrap().show_name}
-    // {" - "}
-    // {&ev.episode.as_ref().unwrap().name}
-    //
     let text_type = match se.media_type {
-        MediaType::Tv => {
-            let text = format!{" {} | {} - {}",
-                               se.scheduled_date.format("%R"),
-                               se.episode.as_ref().unwrap().show_name,
-                               se.episode.as_ref().unwrap().name };
-            let type_ = "gg-tv".to_string();
+        MediaType::tv => {
+            // [ICON] 16:30 | The Office - The Dundies
+            let text = format! {" {} | {} - {}",
+            se.scheduled_date.format("%R"),
+            se.episode.as_ref().unwrap().show_name,
+            se.episode.as_ref().unwrap().name };
+            let icon = "gg-tv".to_string();
 
-            (text, type_)
+            (text, icon)
         }
-        MediaType::Movie => {
-            let text = format!{" {} | {}",
-                               se.scheduled_date.format("%R"),
-                               se.movie.as_ref().unwrap().show_name };
-            let type_ = "gg-film".to_string();
+        MediaType::movie => {
+            // [ICON] 16:30 | Ghostbusters
+            let text = format! {" {} | {}",
+            se.scheduled_date.format("%R"),
+            se.movie.as_ref().unwrap().show_name };
+            let icon = "gg-film".to_string();
 
-            (text, type_)
+            (text, icon)
         }
-        MediaType::Actor => {
-            (String::from("Unknown Actor"), String::from("gg-boy"))
-        }
-        MediaType::Unknown => {
-            (String::from("Unknown Actor"), String::from("gg-danger"))
-        }
+        MediaType::actor => (String::from("Unknown Actor"), String::from("gg-boy")),
+        MediaType::unknown => (String::from("Unknown"), String::from("gg-danger")),
     };
 
-
-
-    html!{
-        <>
+    html! {
+        <a class="panel-block schedule-item">
             <span class="panel-icon">
                 <i class={text_type.1} aria-hidden="true"></i>
             </span>
             {text_type.0}
-        </>
+        </a>
     }
 }
 
@@ -125,7 +112,7 @@ impl Component for EventCalendar {
         let current_date = ctx.props().date;
         Self {
             active_day: current_date,
-            active_month: current_date
+            active_month: current_date,
         }
     }
 
@@ -148,7 +135,7 @@ impl Component for EventCalendar {
         let date = self.active_month;
         let dn = day.date_naive();
 
-        let chevron_click = ctx.link().callback(move |me:MouseEvent| {
+        let chevron_click = ctx.link().callback(move |me: MouseEvent| {
             let mut out_date = date;
             if let Some(elem_id) = UiHelpers::get_id_from_event_elem(Event::from(me)) {
                 if let Some(direction) = elem_id.strip_prefix("cal_month_") {
@@ -156,23 +143,30 @@ impl Component for EventCalendar {
                     let mut month = date.month();
                     match direction {
                         "next" => {
-                            if month+1 == 13 {
+                            if month + 1 == 13 {
                                 month = 1;
                                 year += 1;
                             } else {
                                 month += 1;
                             }
                             let next_month = NaiveDate::from_ymd(year, month, 1);
-                            out_date = DateTime::from_utc(next_month.and_time(NaiveTime::from_hms(0, 0, 1)), Utc);
-                        },
+                            out_date = DateTime::from_utc(
+                                next_month.and_time(NaiveTime::from_hms(0, 0, 1)),
+                                Utc,
+                            );
+                        }
                         "prev" => {
-                            let prev_month = NaiveDate::from_ymd(year, month, 1).sub(Duration::days(1));
-                            out_date = DateTime::from_utc(prev_month.and_time(NaiveTime::from_hms(0, 0, 1)), Utc);
-                        },
+                            let prev_month =
+                                NaiveDate::from_ymd(year, month, 1).sub(Duration::days(1));
+                            out_date = DateTime::from_utc(
+                                prev_month.and_time(NaiveTime::from_hms(0, 0, 1)),
+                                Utc,
+                            );
+                        }
                         "curr" => {
                             out_date = Utc::now();
                         }
-                        _ => unreachable!()
+                        _ => unreachable!(),
                     }
                 }
             }
@@ -181,22 +175,26 @@ impl Component for EventCalendar {
 
         let em = EventManager::create();
         // Must be mutable to sort after collection.
-        let mut day_events: Vec<&ScheduledEvent> = em.events.iter()
-            .filter(|se| se.scheduled_date.date_naive() == dn )
+        let mut day_events: Vec<&ScheduledEvent> = em
+            .events
+            .iter()
+            .filter(|se| se.scheduled_date.date_naive() == dn)
             .collect();
         // Sort our day's events by time...
         day_events.sort_by(|a, b| a.scheduled_date.cmp(&b.scheduled_date));
 
         let cells = get_calendar_cells(&date);
         let cell_id_format = "%Y_%m_%d";
-        let day_click = ctx.link().callback(move |me:MouseEvent| {
+        let day_click = ctx.link().callback(move |me: MouseEvent| {
             let mut out = day;
             if let Some(elem_id) = UiHelpers::get_id_from_event_elem(Event::from(me)) {
                 let id_split: Vec<&str> = elem_id.split("_").collect();
-                out = Utc.ymd(
-                    id_split[0].parse::<i32>().unwrap(),
-                    id_split[1].parse::<u32>().unwrap(),
-                    id_split[2].parse::<u32>().unwrap())
+                out = Utc
+                    .ymd(
+                        id_split[0].parse::<i32>().unwrap(),
+                        id_split[1].parse::<u32>().unwrap(),
+                        id_split[2].parse::<u32>().unwrap(),
+                    )
                     .and_hms(0, 0, 1);
             }
 
@@ -208,8 +206,10 @@ impl Component for EventCalendar {
                 None => html! {<td></td>},
                 Some(d) => {
                     let day_id = d.format(cell_id_format).to_string();
-                    let events: Vec<&ScheduledEvent> = em.events.iter()
-                        .filter(|se| se.scheduled_date.date_naive() == d )
+                    let events: Vec<&ScheduledEvent> = em
+                        .events
+                        .iter()
+                        .filter(|se| se.scheduled_date.date_naive() == d)
                         .collect();
                     html! {
                         // Even though the onclick is on the TD, nested elements trigger it and fail
@@ -229,17 +229,20 @@ impl Component for EventCalendar {
                 }
             }
         };
-        let weeks= cells.chunks(7).map(|week| {
-            html!{
-                <tr>
-                  {
-                    week.iter().map(|&d| {
-                      day_val(d.clone())
-                    }).collect::<Html>()
-                  }
-                </tr>
-            }
-        }).collect::<Html>();
+        let weeks = cells
+            .chunks(7)
+            .map(|week| {
+                html! {
+                    <tr>
+                      {
+                        week.iter().map(|&d| {
+                          day_val(d.clone())
+                        }).collect::<Html>()
+                      }
+                    </tr>
+                }
+            })
+            .collect::<Html>();
 
         html! {
             <div class="is-centered box calendar-container">
@@ -266,11 +269,7 @@ impl Component for EventCalendar {
                                     <p class="subtitle">{"Schedule"}</p>
                                     {
                                         day_events.iter().map(|&ev| {
-                                            html!{
-                                                <a class="panel-block schedule-item">
-                                                    {formatted_event_line(ev)}
-                                                </a>
-                                            }
+                                            formatted_event_line(ev)
                                         }).collect::<Html>()
                                     }
                                 </div>
