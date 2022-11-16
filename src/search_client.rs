@@ -1,27 +1,25 @@
 use std::fmt::{Display, Formatter};
-use std::future::Future;
+
 use std::rc::Rc;
 
-use futures::future::{join_all, try_join_all};
-use futures::TryFutureExt;
-use itertools::{fold, Itertools};
+use futures::future::try_join_all;
+
 use reqwasm::http::Request;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
-use std::thread;
-use std::time::Duration;
-use web_sys::RequestMode;
 
 use weblog::{console_error, console_log};
 use yew::Context;
 
 use crate::FindShow;
 
+// Linter doesn't like lowercase here, but it matches the TMDB return values.
 #[derive(Clone, PartialEq, Serialize, Deserialize, Hash, Eq)]
 pub enum MediaType {
     tv,
     movie,
     actor,
+    person,
     unknown,
 }
 
@@ -37,6 +35,7 @@ impl From<MediaType> for String {
             MediaType::tv => "tv",
             MediaType::movie => "movie",
             MediaType::actor => "actor",
+            MediaType::person => "person",
             MediaType::unknown => "unknown",
         }
         .to_string()
@@ -49,6 +48,7 @@ impl Display for MediaType {
             MediaType::tv => "tv",
             MediaType::movie => "movie",
             MediaType::actor => "actor",
+            MediaType::person => "person",
             MediaType::unknown => "unknown",
         };
         write!(f, "{mt}")
@@ -62,6 +62,7 @@ impl FromStr for MediaType {
             "movie" => Self::movie,
             "tv" => Self::tv,
             "actor" => Self::actor,
+            "person" => Self::person,
             _ => Self::unknown,
         };
 
@@ -74,7 +75,7 @@ impl From<String> for MediaType {
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct SearchResult {
     pub id: String,
     pub title: String,
@@ -87,12 +88,12 @@ pub trait SearchClient {
     fn by_id(&self, id: String, ctx: &&Context<FindShow>);
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct TMDB {
     pub api_key: Rc<String>,
 }
 
-#[derive(Default, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TMDBTVObj {
     pub id: usize,
     #[serde(default)]
@@ -124,7 +125,7 @@ pub struct TMDBTVObj {
     pub seasons: Vec<TMDBSeasonObj>,
 }
 
-#[derive(Default, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TMDBMovieObj {
     pub id: usize,
     #[serde(default)]
@@ -150,7 +151,7 @@ pub struct TMDBMovieObj {
 }
 
 // Hacky
-#[derive(Default, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TMDBResult {
     // -- Shared by TV&Movie, Actor also has a limited subset I dont really care about.
     id: usize,
@@ -180,7 +181,7 @@ pub struct TMDBResult {
     original_title: String,
 }
 
-#[derive(Default, Clone, PartialEq)]
+#[derive(Default, Clone, PartialEq, Eq)]
 pub struct SearchResponse {
     pub page: usize,
     pub results: Vec<SearchResult>,
@@ -188,7 +189,7 @@ pub struct SearchResponse {
     pub total_results: usize,
 }
 
-#[derive(Default, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TMDBSearchResponse {
     page: usize,
     results: Vec<TMDBResult>,
@@ -196,7 +197,7 @@ pub struct TMDBSearchResponse {
     total_results: usize,
 }
 
-#[derive(Default, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TMDBEpisodeObj {
     #[serde(default)]
     pub air_date: Option<String>,
@@ -216,7 +217,7 @@ pub struct TMDBEpisodeObj {
     pub runtime: Option<usize>,
 }
 
-#[derive(Default, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TMDBSeasonObj {
     #[serde(default)]
     pub air_date: Option<String>,

@@ -1,4 +1,3 @@
-use chrono::{DateTime, Utc};
 use std::fmt::{Display, Formatter};
 
 use gloo::storage::{LocalStorage, Storage};
@@ -9,7 +8,7 @@ use weblog::{console_error, console_info};
 
 use yew::prelude::*;
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum ByngerStore {
     TmdbApiKey = 0,
     ScheduledEvents = 1,
@@ -26,7 +25,7 @@ impl Display for ByngerStore {
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct SiteConfig {
     tmdb_api_key: Option<String>,
     schedule_entries: Option<Vec<String>>,
@@ -93,8 +92,8 @@ impl Component for SiteConfig {
                 <div class="field">
                   <label class="label">{"TMDB API Key"}</label>
                   <div class="control">
-                    <input class="input" type="text" placeholder="TMDB API Key" value={api_key}
-                        id={"tmdb_api_key"} {onchange} />
+                    <input class="input" type="password" placeholder="TMDB API Key" value={api_key}
+                        id="tmdb_api_key" {onchange} />
                   </div>
                 </div>
                 <div class="control">

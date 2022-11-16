@@ -1,9 +1,10 @@
-use crate::search_client::{MediaType, SearchClient, TMDBMovieObj, TMDBTVObj, TMDB};
+use crate::search_client::{MediaType, TMDBMovieObj, TMDBTVObj, TMDB};
 use std::fmt::Display;
 use weblog::console_error;
 use yew::prelude::*;
+use yew::virtual_dom::VNode;
 
-#[derive(Default, Clone, PartialEq, Properties)]
+#[derive(Default, Clone, PartialEq, Eq, Properties)]
 pub struct Show {
     pub id: String,                     // tmdb/tv: id
     pub title: Option<String>,          // tmdb/tv: name
@@ -86,7 +87,7 @@ pub enum ShowCardMsg {
     ShowClicked,
 }
 impl From<()> for ShowCardMsg {
-    fn from(val: ()) -> Self {
+    fn from(_val: ()) -> Self {
         Self::Loading
     }
 }
@@ -108,7 +109,7 @@ impl ShowCard {
             },
         };
 
-        thumb
+        thumb as VNode
     }
 
     fn value_into_pair<T: Display>(name: &str, item: &Option<T>) -> Html {
@@ -172,7 +173,7 @@ impl Component for ShowCard {
                 html! { /* do nothing */ }
             }
             Some(s) => {
-                let title = &s.title.unwrap_or_else(|| "".to_string());
+                let title = &s.title.unwrap_or_default();
                 let season_count = ShowCard::value_into_pair("Seasons", &s.number_of_seasons);
                 let episode_count = ShowCard::value_into_pair("Episodes", &s.number_of_episodes);
                 let air_date = ShowCard::value_into_pair("First Aired", &s.first_air_date);
@@ -206,6 +207,6 @@ impl Component for ShowCard {
             }
         };
 
-        view
+        view as VNode
     }
 }

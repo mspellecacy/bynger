@@ -1,38 +1,29 @@
-use chrono::{
-    DateTime, Datelike, Duration, Local, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Utc,
-};
-use futures::stream::iter;
-use futures::StreamExt;
-use gloo::console::console;
+use chrono::{DateTime, Datelike, Duration, Local, NaiveDate, NaiveDateTime, NaiveTime, Utc};
+
 use std::collections::HashMap;
-use std::ops::{Add, Deref};
-use std::rc::Rc;
+use std::ops::Add;
+
 use std::str::FromStr;
 
 use gloo::storage::{LocalStorage, Storage};
-use itertools::{fold, Itertools};
 use wasm_bindgen::prelude::wasm_bindgen;
 use wasm_bindgen::JsValue;
 
-use web_sys::{Document, Element, HtmlElement, HtmlInputElement, Node, NodeList};
-
-use weblog::{console_error, console_info, console_log};
+use weblog::{console_error, console_log};
 use yew::prelude::*;
 
 use crate::episodes_picker::EpisodePicker;
 use crate::event_calendar::CalendarSchedulableEvent;
 use crate::event_manager::EventManager;
 use crate::events::ScheduledEvent;
-use crate::find_show::FindShowMsg;
-use crate::schedule_show::ScheduleShowState::EpisodeScheduler;
-use crate::search_client::{MediaType, TMDBMovieObj, TMDB};
+
+use crate::search_client::{MediaType, TMDB};
 use crate::show_card::Show;
 use crate::site_config::ByngerStore;
 use crate::ui_helpers::UiHelpers;
-use crate::Route::Schedule;
-use crate::{search_client, Route, StorageError};
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use yew_router::prelude::*;
+
+use serde::{Deserialize, Serialize};
+use web_sys::HtmlElement;
 
 #[wasm_bindgen(module = "/js/helpers.js")]
 extern "C" {
@@ -43,7 +34,7 @@ extern "C" {
     fn calendar_range_value(cal: &JsValue) -> String;
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct SchedulingBoundaries {
     pub start_date: NaiveDate,
     pub start_time: NaiveTime,
@@ -51,7 +42,7 @@ pub struct SchedulingBoundaries {
     pub end_time: NaiveTime,
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct SchedulingOptions {
     pub days_of_week: HashMap<u32, bool>,
     pub eps_per_day: usize,
@@ -60,7 +51,7 @@ pub struct SchedulingOptions {
 
 // FIXME: These structs should probably get moved in to a search_client as generic output types.
 // TODO: This is a bit redundant, but eventually I would like to have a more generic search client.
-#[derive(Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Episode {
     pub air_date: String,
     pub episode_number: usize,
@@ -73,7 +64,7 @@ pub struct Episode {
     pub show_id: usize,
 }
 
-#[derive(Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Movie {
     pub release_date: String,
     pub show_name: String,
@@ -103,7 +94,7 @@ impl CalendarSchedulableEvent for Episode {
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Season {
     pub id: usize,
     pub air_date: Option<String>,
@@ -114,7 +105,7 @@ pub struct Season {
     pub episodes: Option<Vec<Episode>>,
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum ScheduleShowState {
     Loading,
     ShowPicker,
@@ -155,23 +146,6 @@ pub enum ScheduleShowMsg {
     ScheduleEpisodes(Vec<Episode>),
     DistributeEpisodes(SchedulingBoundaries, SchedulingOptions),
     DistributeMovie((NaiveDate, NaiveTime)),
-}
-
-fn get_thumbnail(path: Option<String>) -> Html {
-    match TMDB::poster_path(path) {
-        None => html! {},
-        Some(s) => html! {
-            <figure class="image">
-                <div class="has-ratio" style="width:128px;">
-                    <img src={s} alt="Placeholder image" />
-                </div>
-            </figure>
-        },
-    }
-}
-
-fn tv_schedule_body() -> Html {
-    return html! {/* */};
 }
 
 impl Component for ScheduleShow {
@@ -215,6 +189,7 @@ impl Component for ScheduleShow {
                             //ScheduleShowMsg::Working
                         }
                         MediaType::actor => ScheduleShowMsg::Working,
+                        MediaType::person => ScheduleShowMsg::Working,
                         MediaType::unknown => ScheduleShowMsg::Working,
                     }
                 });
@@ -253,9 +228,9 @@ impl Component for ScheduleShow {
                                                         Some(runtime) => runtime,
                                                     };
                                                     eps.push(Episode {
-                                                        air_date: ep
-                                                            .air_date
-                                                            .unwrap_or(String::from("unknown")),
+                                                        air_date: ep.air_date.unwrap_or_else(
+                                                            || String::from("unknown"),
+                                                        ),
                                                         episode_number: ep.episode_number,
                                                         name: ep.name,
                                                         id: ep.id,
@@ -263,7 +238,7 @@ impl Component for ScheduleShow {
                                                         still_path: ep.still_path,
                                                         episode_run_time: fuzzy_runtime,
                                                         show_name: show.clone().title.unwrap(),
-                                                        show_id: (&show.id).parse().unwrap(),
+                                                        show_id: show.id.parse().unwrap(),
                                                     });
 
                                                     // console_log!(format!("ep {}; runtime: {}.", ep.episode_number, fuzzy_runtime));
@@ -306,6 +281,7 @@ impl Component for ScheduleShow {
                         self.schedule_show_state = ScheduleShowState::MovieScheduler;
                     }
                     MediaType::actor => {}
+                    MediaType::person => {}
                     MediaType::unknown => {}
                 }
 
@@ -413,8 +389,10 @@ impl Component for ScheduleShow {
                 let movie = Movie {
                     release_date: show
                         .first_air_date
-                        .unwrap_or(String::from("Unknown Release Date")),
-                    show_name: show.title.unwrap_or(String::from("Unknown Movie Title")),
+                        .unwrap_or_else(|| String::from("Unknown Release Date")),
+                    show_name: show
+                        .title
+                        .unwrap_or_else(|| String::from("Unknown Movie Title")),
                     id: 0_usize,
                     movie_id: show.id.parse().unwrap(),
                 };
@@ -628,7 +606,7 @@ impl Component for ScheduleShow {
                             let _season_id = s.id;
                             let season_number = s.season_number;
                             let episode_count = s.episodes.clone().unwrap().len();
-                            let poster_fragment = get_thumbnail(s.poster_path.clone());
+                            let poster_fragment = UiHelpers::get_thumbnail(s.poster_path.clone());
                             let overview = s.overview.clone().unwrap_or_else(|| String::from("No Overview"));
                             let overview_long = || overview.len() > overview_max_len;
                             let air_date = s.air_date.clone().unwrap_or_else(|| String::from("Missing Air Date"));
@@ -676,15 +654,14 @@ impl Component for ScheduleShow {
                     MediaType::movie => {
                         subtitle = format!("Released: {}", show.first_air_date.as_ref().unwrap());
                         let overview_max_len = 300;
-                        let poster_fragment = get_thumbnail(show.poster.clone());
+                        let poster_fragment = UiHelpers::get_thumbnail(show.poster.clone());
                         let overview = show
                             .overview
                             .clone()
                             .unwrap_or_else(|| String::from("No Overview"));
-                        let overview_long = || overview.len() > overview_max_len;
-                        let air_date = show
+                        let _overview_long = || overview.len() > overview_max_len;
+                        let _air_date = show
                             .first_air_date
-                            .clone()
                             .unwrap_or_else(|| String::from("Missing Air Date"));
 
                         html! {
@@ -697,15 +674,6 @@ impl Component for ScheduleShow {
                                         <div class="media-content mb-0 pb-0">
                                             <container class="container box pt-1 pb-1 pl-1 pr-1 mr-2">
                                                 <p class="card-season-overview">{&overview}</p>
-                                                // {if overview_long() {
-                                                // // TODO: Implement description reveal.
-                                                // html!{
-                                                // <p class="card-season-overview-more is-primary">
-                                                //     <span class="icon is-pulled-right mr-1">
-                                                //         <i class="gg-chevron-down-o is-large is-info"></i>
-                                                //     </span>
-                                                // </p>}
-                                                // } else { html!{} }}
                                             </container>
                                         </div>
                                     </div>
@@ -713,12 +681,9 @@ impl Component for ScheduleShow {
                             </div>
                         }
                     }
-                    MediaType::actor => {
-                        html! {<p>{"Im an actor!"}</p>}
-                    }
-                    MediaType::unknown => {
-                        html! {<p>{"Im an unknown!"}</p>}
-                    }
+                    MediaType::actor => html! {<p>{"Im an actor!"}</p>},
+                    MediaType::person => html! {<p>{"Im a person!"}</p>},
+                    MediaType::unknown => html! {<p>{"Im an unknown!"}</p>},
                 }
             }
             ScheduleShowState::EpisodeScheduler => {
@@ -803,7 +768,7 @@ impl Component for ScheduleShow {
                                                 // TODO: Checkbox should disable End Date input
                                                 // onchange={}
                                         />
-                                        <label for={format!("checkbox_use_end_date")}>
+                                        <label for={"checkbox_use_end_date".to_string()}>
                                             {"Use End Date"}
                                         </label>
                                     </div>

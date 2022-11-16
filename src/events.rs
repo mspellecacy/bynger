@@ -1,11 +1,9 @@
-use crate::event_calendar::CalendarSchedulableEvent;
 use chrono::{DateTime, Utc};
 //use serde::ser::{Serialize, SerializeStruct, Serializer};
 use crate::schedule_show::{Episode, Movie};
 use crate::search_client::MediaType;
-use serde::de::{Error, Visitor};
-use serde::ser::SerializeStruct;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ScheduledEvent {

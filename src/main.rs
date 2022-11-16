@@ -4,6 +4,7 @@ use gloo::storage::errors::StorageError;
 use gloo::storage::{LocalStorage, Storage};
 
 use yew::prelude::*;
+use yew::virtual_dom::VNode;
 use yew_router::prelude::*;
 
 mod episodes_picker;
@@ -22,7 +23,7 @@ use crate::event_calendar::EventCalendar;
 use crate::find_show::FindShow;
 use crate::site_config::{ByngerStore, SiteConfig};
 
-#[derive(Routable, PartialEq, Clone, Debug)]
+#[derive(Routable, PartialEq, Eq, Clone, Debug)]
 pub enum Route {
     #[at("/")]
     Home,
@@ -111,8 +112,9 @@ fn switch(routes: &Route) -> Html {
     let api_key: Result<String, StorageError> =
         LocalStorage::get(ByngerStore::TmdbApiKey.to_string());
 
+    // Redirect to config if TMDB API Key doesn't exist or is empty.
     // Dont redirect if we're already going to config (otherwise infinite redirect)
-    let main = if api_key.is_err() && routes != &Route::Config {
+    let main = if (api_key.is_err() || api_key.expect("").is_empty()) && routes != &Route::Config {
         html! { <Redirect<Route> to={Route::Config}/> }
     } else {
         match routes {
@@ -128,7 +130,8 @@ fn switch(routes: &Route) -> Html {
         }
     };
 
-    main
+    // Stops the linter from complaining about returning () instead of Html
+    main as VNode
 }
 
 fn main() {

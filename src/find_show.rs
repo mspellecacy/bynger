@@ -1,7 +1,7 @@
-use futures::StreamExt;
 use gloo::storage::{LocalStorage, Storage};
 use itertools::Itertools;
 use std::collections::HashMap;
+use std::rc::Rc;
 use std::str::FromStr;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::UnwrapThrowExt;
@@ -11,7 +11,7 @@ use web_sys::InputEvent;
 use weblog::{console_info, console_log};
 use yew::prelude::*;
 
-use crate::schedule_show::{Episode, ScheduleShow};
+use crate::schedule_show::ScheduleShow;
 use crate::search_client::{MediaType, SearchResponse, TMDB};
 use crate::show_card::{Show, ShowCard};
 use crate::site_config::ByngerStore;
@@ -19,7 +19,7 @@ use crate::ui_helpers::UiHelpers;
 
 pub struct FindShow {
     modal_state: FindShowModalState,
-    search_client: TMDB,
+    search_client: Rc<TMDB>,
     search_value: String,
     search_results: HashMap<usize, SearchResponse>,
     show_cache: HashMap<(String, MediaType), Show>,
@@ -40,7 +40,7 @@ impl Default for FindShowModalState {
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum FindShowMsg {
     Click,
     CloseModal,
@@ -81,7 +81,7 @@ pub struct SearchProps {
 }
 
 #[function_component(SearchInput)]
-pub fn search_input(props: &SearchProps) -> Html {
+pub fn search_input(props: &SearchProps) -> () {
     let SearchProps {
         value,
         on_change,
@@ -107,7 +107,7 @@ pub fn search_input(props: &SearchProps) -> Html {
         use_effect_with_deps(
             move |node_ref| {
                 if let Some(input) = node_ref.cast::<HtmlInputElement>() {
-                    input.focus();
+                    if let Ok(_focus) = input.focus() { /* Do nothing, we have input focus. */ }
                 }
                 || ()
             },
@@ -115,16 +115,15 @@ pub fn search_input(props: &SearchProps) -> Html {
         )
     }
 
-    // If I dont use return here the linter complaints about returning () instead of Html
-    return html! {
-          <div class="control has-icons-right">
-            <input ref={props.node_ref.clone()}
-            class="input" type="text" placeholder="Show Title" {value} {oninput} {onkeydown} />
-            <span class="icon is-small is-right">
-                <i class="gg-search"></i>
-            </span>
-          </div>
-    };
+    html! {
+      <div class="control has-icons-right">
+        <input ref={props.node_ref.clone()}
+        class="input" type="text" placeholder="Show Title" {value} {oninput} {onkeydown} />
+        <span class="icon is-small is-right">
+            <i class="gg-search"></i>
+        </span>
+      </div>
+    }
 }
 
 #[derive(Clone, PartialEq, Properties)]
@@ -173,7 +172,7 @@ impl Component for FindShow {
             LocalStorage::get(ByngerStore::TmdbApiKey.to_string()).expect("Missing API Key");
         Self {
             modal_state: Default::default(),
-            search_client: TMDB::new(api_key),
+            search_client: Rc::from(TMDB::new(api_key)),
             search_value: "".to_string(),
             search_results: HashMap::new(),
             show_cache: HashMap::new(),
@@ -325,8 +324,8 @@ impl Component for FindShow {
                             }
                         });
                     }
-                    unknown => {
-                        console_log!(String::from(unknown));
+                    _ => {
+                        console_log!(String::from("Unknown / Unsupported MediaType"));
                     }
                 }
 

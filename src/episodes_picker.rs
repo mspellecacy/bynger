@@ -4,12 +4,12 @@ use itertools::Itertools;
 use web_sys::{Event, HtmlElement};
 
 use crate::schedule_show::Season;
-use crate::search_client::TMDB;
+
 use wasm_bindgen::JsCast;
 use wasm_bindgen::UnwrapThrowExt;
 use yew::prelude::*;
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum EpisodePickerTab {
     // This will kinda do double-duty as state for this component.
     All,
@@ -27,23 +27,9 @@ pub enum EpisodePickerMsg {
     PickerTabChange(Event),
 }
 
-#[derive(Clone, PartialEq, Properties)]
+#[derive(Clone, PartialEq, Eq, Properties)]
 pub struct EpisodePickerProperties {
     pub season: Option<Season>,
-}
-
-// FIXME: Need a basic utility struct instead of duping code.
-fn get_thumbnail(path: Option<String>) -> Html {
-    match TMDB::poster_path(path) {
-        None => html! {},
-        Some(s) => html! {
-            <figure class="image">
-                <div class="has-ratio" style="width:128px;">
-                    <img src={s} alt="Placeholder image" />
-                </div>
-            </figure>
-        },
-    }
 }
 
 impl Component for EpisodePicker {
@@ -60,7 +46,7 @@ impl Component for EpisodePicker {
         }
     }
 
-    fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
+    fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             EpisodePickerMsg::PickerTabChange(e) => {
                 let id = e
@@ -162,14 +148,14 @@ impl Component for EpisodePicker {
                     <div class="tabs is-centered">
                         <ul class="mt-0 ml-0">
                             <li onclick={&tab_click}
-                                class={classes!(is_all.then(|| Some("is-active")))}>
+                                class={classes!(is_all.then_some(Some("is-active")))}>
                                 <a><span id={format!("{tab_id_base}_all")}>{"All"}</span></a>
                             </li>
                             <li onclick={&tab_click}>
                                 <a><span id={format!("{tab_id_base}_some")}>{"Some"}</span></a>
                             </li>
                             <li onclick={&tab_click}
-                                class={classes!(is_all.not().then(|| Some("is-active")))}>
+                                class={classes!(is_all.not().then_some(Some("is-active")))}>
                                 <a><span id={format!("{tab_id_base}_none")}>{"None"}</span></a>
                             </li>
                         </ul>

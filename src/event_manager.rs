@@ -1,27 +1,18 @@
-use futures::TryFutureExt;
 use gloo::storage::errors::StorageError;
 use gloo::storage::{LocalStorage, Storage};
-use js_sys::Atomics::store;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::fmt::Error;
-use std::ops::Deref;
-use web_sys::RequestCache::Default;
 
-use crate::event_calendar::CalendarSchedulableEvent;
 use crate::events::ScheduledEvent;
 use crate::ByngerStore;
-use crate::ByngerStore::ScheduledEvents;
-use weblog::console_log;
 
 pub struct EventManager {
-    storage: Box<String>,
-    pub events: Box<Vec<ScheduledEvent>>,
+    storage: String,
+    pub events: Vec<ScheduledEvent>,
 }
 
 impl EventManager {
     pub(crate) fn create() -> Self {
-        let storage = Box::new(format!("{}", ByngerStore::ScheduledEvents));
-        let events = Box::new(LocalStorage::get(&*storage).unwrap_or(Vec::<ScheduledEvent>::new()));
+        let storage = format!("{}", ByngerStore::ScheduledEvents);
+        let events = LocalStorage::get(&*storage).unwrap_or_default();
 
         EventManager { storage, events }
     }
@@ -32,7 +23,7 @@ impl EventManager {
     }
 
     fn store(&self) -> Result<(), StorageError> {
-        LocalStorage::set(self.storage.as_ref(), self.events.to_vec().clone())
+        LocalStorage::set(&self.storage, self.events.to_vec())
     }
 
     fn purge_events(&mut self) -> Result<(), StorageError> {

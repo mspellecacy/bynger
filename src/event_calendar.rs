@@ -1,11 +1,5 @@
-use chrono::format::Fixed::TimezoneOffset;
 use chrono::{DateTime, Datelike, Duration, NaiveDate, NaiveTime, TimeZone, Utc};
-use gloo::console::console;
-use itertools::Itertools;
 use std::ops::Sub;
-
-use serde::{Deserialize, Deserializer};
-use weblog::console_log;
 use yew::prelude::*;
 
 use crate::event_calendar::EventCalendarMsg::{ChangeDate, ChangeDay};
@@ -32,7 +26,7 @@ pub enum EventCalendarMsg {
     ChangeDay(DateTime<Utc>),
 }
 
-#[derive(Clone, PartialEq, Properties)]
+#[derive(Clone, PartialEq, Eq, Properties)]
 pub struct EventCalendarProperties {
     #[prop_or(Utc::now())]
     pub date: DateTime<Utc>,
@@ -68,36 +62,37 @@ fn get_calendar_cells(date: &DateTime<Utc>) -> Vec<Option<NaiveDate>> {
 }
 
 fn formatted_event_line(se: &ScheduledEvent) -> Html {
-    let text_type = match se.media_type {
+    let (text, icon) = match se.media_type {
         MediaType::tv => {
             // [ICON] 16:30 | The Office - The Dundies
-            let text = format! {" {} | {} - {}",
+            let t = format! {" {} | {} - {}",
             se.scheduled_date.format("%R"),
             se.episode.as_ref().unwrap().show_name,
             se.episode.as_ref().unwrap().name };
-            let icon = "gg-tv".to_string();
+            let i = "gg-tv".to_string();
 
-            (text, icon)
+            (t, i)
         }
         MediaType::movie => {
             // [ICON] 16:30 | Ghostbusters
-            let text = format! {" {} | {}",
+            let t = format! {" {} | {}",
             se.scheduled_date.format("%R"),
             se.movie.as_ref().unwrap().show_name };
-            let icon = "gg-film".to_string();
+            let i = "gg-film".to_string();
 
-            (text, icon)
+            (t, i)
         }
         MediaType::actor => (String::from("Unknown Actor"), String::from("gg-boy")),
+        MediaType::person => (String::from("Unknown Person"), String::from("gg-boy")),
         MediaType::unknown => (String::from("Unknown"), String::from("gg-danger")),
     };
 
     html! {
         <a class="panel-block schedule-item">
             <span class="panel-icon">
-                <i class={text_type.1} aria-hidden="true"></i>
+                <i class={icon} aria-hidden="true"></i>
             </span>
-            {text_type.0}
+            {text}
         </a>
     }
 }
@@ -188,7 +183,7 @@ impl Component for EventCalendar {
         let day_click = ctx.link().callback(move |me: MouseEvent| {
             let mut out = day;
             if let Some(elem_id) = UiHelpers::get_id_from_event_elem(Event::from(me)) {
-                let id_split: Vec<&str> = elem_id.split("_").collect();
+                let id_split: Vec<&str> = elem_id.split('_').collect();
                 out = Utc
                     .ymd(
                         id_split[0].parse::<i32>().unwrap(),
@@ -236,7 +231,7 @@ impl Component for EventCalendar {
                     <tr>
                       {
                         week.iter().map(|&d| {
-                          day_val(d.clone())
+                          day_val(d)
                         }).collect::<Html>()
                       }
                     </tr>
