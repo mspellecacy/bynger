@@ -15,7 +15,7 @@ Currently, there is no standalone release to launch Bynger, perhaps in the futur
 
 ## How to use:
 Once Bynger is configured with a working TMDB API Key, you can start searching for content you want to schedule: 
-![Basic Demo](https://i.imgur.com/MmDkKEg.gif)
+![Basic Demo](https://i.imgur.com/UEfz6Wv.gif)
 
 
 ## Want to contribute?
