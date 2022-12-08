@@ -10,6 +10,7 @@ use web_sys::HtmlInputElement;
 use web_sys::InputEvent;
 use weblog::{console_info, console_log};
 use yew::prelude::*;
+use yew::virtual_dom::VNode;
 
 use crate::schedule_show::ScheduleShow;
 use crate::search_client::{MediaType, SearchResponse, TMDB};
@@ -47,8 +48,8 @@ pub enum FindShowMsg {
     InputChange(String),
     Search,
     Working,
-    SearchComplete(SearchResponse),
-    ShowResult(Show),
+    SearchComplete(Box<SearchResponse>),
+    ShowResult(Box<Show>),
     GetShow((String, MediaType)),
     ShowSelected((String, MediaType)),
     PageRequest(usize),
@@ -81,7 +82,7 @@ pub struct SearchProps {
 }
 
 #[function_component(SearchInput)]
-pub fn search_input(props: &SearchProps) -> () {
+pub fn search_input(props: &SearchProps) -> VNode {
     let SearchProps {
         value,
         on_change,
@@ -209,7 +210,7 @@ impl Component for FindShow {
                 ctx.link().send_future(async move {
                     let res = sc.search_title(&sv, &cp).await;
                     match res {
-                        Ok(sr) => FindShowMsg::SearchComplete(sr),
+                        Ok(sr) => FindShowMsg::SearchComplete(Box::new(sr)),
                         Err(_) => FindShowMsg::Working,
                     }
                 });
@@ -230,7 +231,7 @@ impl Component for FindShow {
 
                 self.current_page = Some(res.page);
                 self.max_page = Some(res.total_pages);
-                self.search_results.insert(res.page, res);
+                self.search_results.insert(res.page, *res);
 
                 true
             }
@@ -272,7 +273,7 @@ impl Component for FindShow {
             }
             FindShowMsg::ShowResult(show) => {
                 let key = (show.id.clone(), show.media_type.clone());
-                self.show_cache.insert(key, show);
+                self.show_cache.insert(key, *show);
 
                 true
             }
@@ -285,7 +286,7 @@ impl Component for FindShow {
                             match sc.get_tv(&id).await {
                                 Ok(res) => {
                                     let show = Show::from(res);
-                                    FindShowMsg::ShowResult(show)
+                                    FindShowMsg::ShowResult(Box::new(show))
                                 }
                                 Err(e) => {
                                     console_log!(e);
@@ -299,7 +300,7 @@ impl Component for FindShow {
                             match sc.get_movie(&id).await {
                                 Ok(res) => {
                                     let show = Show::from(res);
-                                    FindShowMsg::ShowResult(show)
+                                    FindShowMsg::ShowResult(Box::new(show))
 
                                     //let blap = Episode::from(show);
 

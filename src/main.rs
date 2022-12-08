@@ -4,7 +4,7 @@ use gloo::storage::errors::StorageError;
 use gloo::storage::{LocalStorage, Storage};
 
 use yew::prelude::*;
-use yew::virtual_dom::VNode;
+use yew::{html, Component, Context, Html};
 use yew_router::prelude::*;
 
 mod episodes_picker;
@@ -45,7 +45,7 @@ impl Component for Bynger {
     type Message = ByngerMsg;
     type Properties = ();
 
-    fn create(ctx: &Context<Self>) -> Self {
+    fn create(_ctx: &Context<Self>) -> Self {
         let api_key: Result<String, StorageError> =
             LocalStorage::get(ByngerStore::TmdbApiKey.to_string());
         Self {
@@ -100,7 +100,7 @@ impl Component for Bynger {
                 </nav>
                 <div class="container">
                     <main class="columns is-centered">
-                        <Switch<Route> render={Switch::render(switch)} />
+                        <Switch<Route> render={switch} />
                     </main>
                 </div>
             </BrowserRouter>
@@ -108,13 +108,16 @@ impl Component for Bynger {
     }
 }
 
-fn switch(routes: &Route) -> Html {
+fn switch(routes: Route) -> Html {
+    // FIXME: We're reading this every page change.
+    // I spent a couple hours trying to extract it and make it read only when necessary but created
+    // a different problem, so I reverted the changes.
     let api_key: Result<String, StorageError> =
         LocalStorage::get(ByngerStore::TmdbApiKey.to_string());
 
     // Redirect to config if TMDB API Key doesn't exist or is empty.
     // Dont redirect if we're already going to config (otherwise infinite redirect)
-    let main = if (api_key.is_err() || api_key.expect("").is_empty()) && routes != &Route::Config {
+    if (api_key.is_err() || api_key.expect("").is_empty()) && routes != Route::Config {
         html! { <Redirect<Route> to={Route::Config}/> }
     } else {
         match routes {
@@ -128,12 +131,9 @@ fn switch(routes: &Route) -> Html {
                 html! { <SiteConfig /> }
             }
         }
-    };
-
-    // Stops the linter from complaining about returning () instead of Html
-    main as VNode
+    }
 }
 
 fn main() {
-    yew::start_app::<Bynger>();
+    yew::Renderer::<Bynger>::new().render();
 }

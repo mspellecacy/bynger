@@ -17,10 +17,10 @@ impl EventManager {
         EventManager { storage, events }
     }
 
-    fn add_event(&mut self, scheduled_event: ScheduledEvent) {
-        // console_log!(format!("{}", &scheduled_event.event.id()));
-        self.events.push(scheduled_event)
-    }
+    // fn add_event(&mut self, scheduled_event: ScheduledEvent) {
+    //     // console_log!(format!("{}", &scheduled_event.event.id()));
+    //     self.events.push(scheduled_event)
+    // }
 
     fn store(&self) -> Result<(), StorageError> {
         LocalStorage::set(&self.storage, self.events.to_vec())

@@ -2,7 +2,6 @@ use crate::search_client::{MediaType, TMDBMovieObj, TMDBTVObj, TMDB};
 use std::fmt::Display;
 use weblog::console_error;
 use yew::prelude::*;
-use yew::virtual_dom::VNode;
 
 #[derive(Default, Clone, PartialEq, Eq, Properties)]
 pub struct Show {
@@ -83,7 +82,7 @@ pub struct ShowCard {}
 pub enum ShowCardMsg {
     Loading,
     LoadingError(String),
-    ShowFound(Show),
+    ShowFound(Box<Show>),
     ShowClicked,
 }
 impl From<()> for ShowCardMsg {
@@ -100,29 +99,25 @@ pub struct ShowCardProps {
 
 impl ShowCard {
     fn get_thumbnail(path: Option<String>) -> Html {
-        let thumb = match path {
+        match path {
             None => html! {},
             Some(s) => html! {
                 <figure class="image is-2by3">
                     <img class="is-radiusless" src={s} alt="Placeholder image" />
                 </figure>
-            },
-        };
-
-        thumb as VNode
+            }
+        }
     }
 
     fn value_into_pair<T: Display>(name: &str, item: &Option<T>) -> Html {
         let nbsp = '\u{00a0}'.to_string();
         let template = move |k, v| -> Html {
-            let out = html! {
+            html! {
                 <p class="level">
                     <span class="show-item has-text-weight-semibold">{k}</span>
                     <span class="show-item">{v}</span>
                 </p>
-            };
-
-            out
+            }
         };
 
         match item {
@@ -137,14 +132,14 @@ impl Component for ShowCard {
     type Message = ShowCardMsg;
     type Properties = ShowCardProps;
 
-    fn create(ctx: &Context<Self>) -> Self {
+    fn create(_ctx: &Context<Self>) -> Self {
         Self {}
     }
 
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             ShowCardMsg::Loading => true,
-            ShowCardMsg::ShowFound(show) => {
+            ShowCardMsg::ShowFound(_show) => {
                 // self.show = Some(show);
                 true
             }
@@ -168,7 +163,7 @@ impl Component for ShowCard {
             .link()
             .callback(|_e: MouseEvent| ShowCardMsg::ShowClicked);
 
-        let view = match Some(ctx.props().show.clone()) {
+        match Some(ctx.props().show.clone()) {
             None => {
                 html! { /* do nothing */ }
             }
@@ -205,8 +200,6 @@ impl Component for ShowCard {
                     </div>
                 }
             }
-        };
-
-        view as VNode
+        }
     }
 }

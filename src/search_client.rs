@@ -13,7 +13,7 @@ use yew::Context;
 
 use crate::FindShow;
 
-// Linter doesn't like lowercase here, but it matches the TMDB return values.
+// Linter really doesn't like lowercase enum variants, but it matches the TMDB return values.
 #[derive(Clone, PartialEq, Serialize, Deserialize, Hash, Eq)]
 pub enum MediaType {
     tv,
@@ -39,6 +39,19 @@ impl From<MediaType> for String {
             MediaType::unknown => "unknown",
         }
         .to_string()
+    }
+}
+
+
+impl From<MediaType> for &str {
+    fn from(mt: MediaType) -> Self {
+        match mt {
+            MediaType::tv => "tv",
+            MediaType::movie => "movie",
+            MediaType::actor => "actor",
+            MediaType::person => "person",
+            MediaType::unknown => "unknown",
+        }
     }
 }
 

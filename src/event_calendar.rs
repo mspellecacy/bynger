@@ -38,11 +38,11 @@ fn get_calendar_cells(date: &DateTime<Utc>) -> Vec<Option<NaiveDate>> {
     let mut cells: Vec<Option<NaiveDate>> = vec![];
     let year = date.year();
     let month = date.month();
-    let month_start = NaiveDate::from_ymd(year, month, 1);
+    let month_start = NaiveDate::from_ymd_opt(year, month, 1).expect("Bad Date");
     let month_start_from_monday = month_start.weekday().number_from_monday();
-    let month_end = match month + 1 == 13 {
-        true => NaiveDate::from_ymd(year, 12, 31),
-        false => NaiveDate::from_ymd(year, month + 1, 1).sub(Duration::days(1)),
+    let month_end = match NaiveDate::from_ymd_opt(year, month + 1, 1) {
+        None => NaiveDate::from_ymd_opt(year, 12, 31).unwrap(),
+        Some(end) => end.sub(Duration::days(1)),
     };
 
     // start cell padding.
@@ -51,7 +51,7 @@ fn get_calendar_cells(date: &DateTime<Utc>) -> Vec<Option<NaiveDate>> {
     }
     // insert days...
     for day_number in 1..=month_end.day() {
-        cells.push(Some(NaiveDate::from_ymd(year, month, day_number)));
+        cells.push(NaiveDate::from_ymd_opt(year, month, day_number));
     }
     // end cell padding
     while cells.len() % 7 != 0 {
@@ -115,6 +115,11 @@ impl Component for EventCalendar {
         match msg {
             ChangeDate(new_date) => {
                 self.active_month = new_date;
+                // Today should pull up the current day if you're in the same month already.
+                if self.active_month.month() == new_date.month() {
+                    self.active_day = new_date;
+                }
+
                 true
             }
             ChangeDay(day) => {
@@ -144,17 +149,18 @@ impl Component for EventCalendar {
                             } else {
                                 month += 1;
                             }
-                            let next_month = NaiveDate::from_ymd(year, month, 1);
+                            let next_month = NaiveDate::from_ymd_opt(year, month, 1).unwrap();
                             out_date = DateTime::from_utc(
-                                next_month.and_time(NaiveTime::from_hms(0, 0, 1)),
+                                next_month.and_time(NaiveTime::from_hms_opt(0, 0, 1).unwrap()),
                                 Utc,
                             );
                         }
                         "prev" => {
-                            let prev_month =
-                                NaiveDate::from_ymd(year, month, 1).sub(Duration::days(1));
+                            let prev_month = NaiveDate::from_ymd_opt(year, month, 1)
+                                .unwrap()
+                                .sub(Duration::days(1));
                             out_date = DateTime::from_utc(
-                                prev_month.and_time(NaiveTime::from_hms(0, 0, 1)),
+                                prev_month.and_time(NaiveTime::from_hms_opt(0, 0, 1).unwrap()),
                                 Utc,
                             );
                         }
@@ -185,12 +191,15 @@ impl Component for EventCalendar {
             if let Some(elem_id) = UiHelpers::get_id_from_event_elem(Event::from(me)) {
                 let id_split: Vec<&str> = elem_id.split('_').collect();
                 out = Utc
-                    .ymd(
+                    .with_ymd_and_hms(
                         id_split[0].parse::<i32>().unwrap(),
                         id_split[1].parse::<u32>().unwrap(),
                         id_split[2].parse::<u32>().unwrap(),
+                        0,
+                        0,
+                        1,
                     )
-                    .and_hms(0, 0, 1);
+                    .unwrap();
             }
 
             ChangeDay(out)
@@ -244,7 +253,7 @@ impl Component for EventCalendar {
                 <div class="columns">
                     <div class="column calendar-left">
                         // This should probably be broken in to it's own component
-                        // <CalendarCard date={date} event-manager={em} />
+                        // <CalendarCard date={date} event-manager={&em} />
                         <div class="card">
                             <div class="card-header-title is-centered pb-0">
                                 <div class="date-num-name-box">

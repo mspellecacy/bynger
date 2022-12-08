@@ -1,4 +1,5 @@
 use std::fmt::{Display, Formatter};
+use std::ops::Deref;
 
 use gloo::storage::{LocalStorage, Storage};
 
@@ -7,6 +8,7 @@ use web_sys::{EventTarget, HtmlInputElement};
 use weblog::{console_error, console_info};
 
 use yew::prelude::*;
+use crate::search_client::MediaType;
 
 #[derive(Clone, PartialEq, Eq)]
 pub enum ByngerStore {
@@ -54,7 +56,7 @@ impl Component for SiteConfig {
         }
     }
 
-    fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
+    fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             SiteConfigMsg::Update(key) => {
                 self.tmdb_api_key = Some(key);
@@ -80,7 +82,7 @@ impl Component for SiteConfig {
 
     fn view(&self, ctx: &Context<Self>) -> Html {
         let api_key = self.tmdb_api_key.clone().unwrap_or_default();
-        let onclick = ctx.link().callback(|me| SiteConfigMsg::Save);
+        let onclick = ctx.link().callback(|_me| SiteConfigMsg::Save);
         let onchange = ctx.link().batch_callback(|e: Event| {
             let target: Option<EventTarget> = e.target();
             let input = target.and_then(|t| t.dyn_into::<HtmlInputElement>().ok());
