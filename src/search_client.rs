@@ -42,7 +42,6 @@ impl From<MediaType> for String {
     }
 }
 
-
 impl From<MediaType> for &str {
     fn from(mt: MediaType) -> Self {
         match mt {

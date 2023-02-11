@@ -7,8 +7,8 @@ use wasm_bindgen::JsCast;
 use web_sys::{EventTarget, HtmlInputElement};
 use weblog::{console_error, console_info};
 
-use yew::prelude::*;
 use crate::search_client::MediaType;
+use yew::prelude::*;
 
 #[derive(Clone, PartialEq, Eq)]
 pub enum ByngerStore {

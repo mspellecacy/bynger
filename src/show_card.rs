@@ -105,7 +105,7 @@ impl ShowCard {
                 <figure class="image is-2by3">
                     <img class="is-radiusless" src={s} alt="Placeholder image" />
                 </figure>
-            }
+            },
         }
     }
 

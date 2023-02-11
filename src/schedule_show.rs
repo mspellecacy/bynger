@@ -70,6 +70,7 @@ pub struct Movie {
     pub show_name: String,
     pub id: usize,
     pub movie_id: usize,
+    pub runtime: usize,
 }
 
 impl CalendarSchedulableEvent for Episode {
@@ -395,6 +396,12 @@ impl Component for ScheduleShow {
                         .unwrap_or_else(|| String::from("Unknown Movie Title")),
                     id: 0_usize,
                     movie_id: show.id.parse().unwrap(),
+                    runtime: show
+                        .episode_run_time
+                        .unwrap()
+                        .get(0)
+                        .expect("Missing Runtime")
+                        .clone(),
                 };
 
                 let scheduled_event = Vec::from([ScheduledEvent {

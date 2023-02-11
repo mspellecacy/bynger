@@ -1,12 +1,20 @@
 use chrono::{DateTime, Datelike, Duration, NaiveDate, NaiveTime, TimeZone, Utc};
 use std::ops::Sub;
+use wasm_bindgen::prelude::wasm_bindgen;
+
 use yew::prelude::*;
 
 use crate::event_calendar::EventCalendarMsg::{ChangeDate, ChangeDay};
-use crate::event_manager::EventManager;
+use crate::event_manager::{CsvType, EventManager};
 use crate::events::ScheduledEvent;
 use crate::search_client::MediaType;
 use crate::ui_helpers::UiHelpers;
+
+#[wasm_bindgen(module = "/js/helpers.js")]
+extern "C" {
+    #[wasm_bindgen(js_name = export_file)]
+    fn export_file(filename: &str, data: &str, data_type: &str);
+}
 
 pub trait CalendarSchedulableEvent {
     fn id(&self) -> String;
@@ -24,6 +32,7 @@ pub struct EventCalendar {
 pub enum EventCalendarMsg {
     ChangeDate(DateTime<Utc>),
     ChangeDay(DateTime<Utc>),
+    ExportCsv,
 }
 
 #[derive(Clone, PartialEq, Eq, Properties)]
@@ -127,14 +136,24 @@ impl Component for EventCalendar {
 
                 true
             }
+            EventCalendarMsg::ExportCsv => {
+                let mut em = EventManager::create();
+                if let Ok(csv) = em.events_as_csv(CsvType::GCAL) {
+                    // Push our CSV to the client as it's own file.
+                    export_file("bynger_event_export.csv", &csv, "text/csv")
+                }
+
+                false
+            }
         }
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
+        let em = EventManager::create();
         let day = self.active_day;
         let date = self.active_month;
         let dn = day.date_naive();
-
+        let onexport = ctx.link().callback(|_| EventCalendarMsg::ExportCsv);
         let chevron_click = ctx.link().callback(move |me: MouseEvent| {
             let mut out_date = date;
             if let Some(elem_id) = UiHelpers::get_id_from_event_elem(Event::from(me)) {
@@ -174,7 +193,6 @@ impl Component for EventCalendar {
             ChangeDate(out_date)
         });
 
-        let em = EventManager::create();
         // Must be mutable to sort after collection.
         let mut day_events: Vec<&ScheduledEvent> = em
             .events
@@ -302,8 +320,8 @@ impl Component for EventCalendar {
                                     <p class="title">{&date.format("%B")}</p>
                                 </div>
                             </p>
-                            <p class="level-item" onclick={&chevron_click}>
-                                <a class="button" id="cal_add_show">{"add show"}</a>
+                            <p class="level-item" onclick={&onexport}>
+                                <a class="button" id="cal_export_events">{"export"}</a>
                             </p>
                             <p class="level-right" onclick={&chevron_click} id="cal_month_next">
                                 <button class="button" id="cal_month_next">
