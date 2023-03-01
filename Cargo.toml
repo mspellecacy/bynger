@@ -17,6 +17,7 @@ weblog = "0.3.0"
 gloo = "0.8.0"
 gloo-utils = "^0.1.3"
 js-sys = "0.3.46"
+ron = "0.8.0"
 
 [profile.release]
 lto = true

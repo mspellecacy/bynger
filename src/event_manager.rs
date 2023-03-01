@@ -92,7 +92,7 @@ impl EventManager {
                             let ep = &event.episode.clone().unwrap();
 
                             csv_string.push_str(&format!(
-                                "{},{},{},{},{},{},{},{},{}\n",
+                                "\"{}\",\"{}\",\"{}\",\"{}\",\"{}\",\"{}\",\"{}\",\"{}\",\"{}\"\n",
                                 tv_subject(event),
                                 event.scheduled_date.format(date_fmt),
                                 event.scheduled_date.format(time_fmt),
@@ -111,7 +111,7 @@ impl EventManager {
                             let mv = &event.movie.clone().unwrap();
 
                             csv_string.push_str(&format!(
-                                "{},{},{},{},{},{},{},{},{}\n",
+                                "\"{}\",\"{}\",\"{}\",\"{}\",\"{}\",\"{}\",\"{}\",\"{}\",\"{}\"\n",
                                 mv_subject(event),
                                 event.scheduled_date.format(date_fmt),
                                 event.scheduled_date.format(time_fmt),

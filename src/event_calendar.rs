@@ -140,7 +140,8 @@ impl Component for EventCalendar {
                 let mut em = EventManager::create();
                 if let Ok(csv) = em.events_as_csv(CsvType::GCAL) {
                     // Push our CSV to the client as it's own file.
-                    export_file("bynger_event_export.csv", &csv, "text/csv")
+                    let now = Utc::now().format("%Y%m%d_%H%M%S");
+                    export_file(format!("bynger_event_export_{}.csv", now).as_str(), &csv, "text/csv")
                 }
 
                 false
