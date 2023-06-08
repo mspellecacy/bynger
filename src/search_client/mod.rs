@@ -14,7 +14,7 @@ use yew::Context;
 use crate::FindShow;
 
 // Linter really doesn't like lowercase enum variants, but it matches the TMDB return values.
-#[derive(Clone, PartialEq, Serialize, Deserialize, Hash, Eq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Hash, Eq)]
 pub enum MediaType {
     tv,
     movie,
@@ -209,7 +209,7 @@ pub struct TMDBSearchResponse {
     total_results: usize,
 }
 
-#[derive(Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TMDBEpisodeObj {
     #[serde(default)]
     pub air_date: Option<String>,
@@ -223,8 +223,12 @@ pub struct TMDBEpisodeObj {
     pub season_number: usize,
     #[serde(default)]
     pub still_path: Option<String>,
-
-    // Not actually documented in the TMDB API, but it does return runtime for some show episodes.
+    #[serde(default)]
+    pub overview: Option<String>,
+    // #[serde(default)]
+    // pub vote_average: Option<String>, // actually return a float I believe.
+    // #[serde(default)]
+    // pub vote_count: Option<usize>,
     #[serde(default)]
     pub runtime: Option<usize>,
 }
@@ -360,12 +364,33 @@ impl TMDB {
             Ok(res) => match res.json::<TMDBSeasonObj>().await {
                 Ok(season) => Some(season),
                 Err(e) => {
-                    console_log!(format!("Failed parsing JSON - {}", e));
+                    console_log!(format!("Failed parsing JSON - {e}"));
                     None
                 }
             },
             Err(e) => {
-                console_log!(format!("Failed Season Request - {}", e));
+                console_log!(format!("Failed Season Request - {e}"));
+                None
+            }
+        }
+    }
+
+    pub async fn get_tv_season_episode(&self, id: &String, season: usize, episode: usize) -> Option<TMDBEpisodeObj> {
+        let key = self.api_key.clone();
+        let base = format!("https://api.themoviedb.org/3/tv/{id}/season/{season}/episode/{episode}");
+        let postfix = format!("?api_key={key}");
+        let url = format!("{base}{postfix}");
+
+        match Request::get(&url).send().await {
+            Ok(res) => match res.json::<TMDBEpisodeObj>().await {
+                Ok(episode) => Some(episode),
+                Err(e) => {
+                    console_log!(format!("Failed parsing JSON - {e}"));
+                    None
+                }
+            },
+            Err(e) => {
+                console_log!(format!("Failed Season Episode Request - {e}"));
                 None
             }
         }

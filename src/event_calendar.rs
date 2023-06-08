@@ -1,13 +1,17 @@
 use chrono::{DateTime, Datelike, Duration, NaiveDate, NaiveTime, TimeZone, Utc};
 use std::ops::Sub;
+use gloo::storage::{LocalStorage, Storage};
+use serde::Deserialize;
 use wasm_bindgen::prelude::wasm_bindgen;
+use weblog::console_log;
 
 use yew::prelude::*;
 
-use crate::event_calendar::EventCalendarMsg::{ChangeDate, ChangeDay};
+use crate::event_calendar::EventCalendarMsg::{ChangeDate, ChangeDay, ScheduledEventDetails};
 use crate::event_manager::{CsvType, EventManager};
 use crate::events::ScheduledEvent;
-use crate::search_client::MediaType;
+use crate::search_client::{MediaType, TMDB, TMDBEpisodeObj};
+use crate::site_config::ByngerStore;
 use crate::ui_helpers::UiHelpers;
 
 #[wasm_bindgen(module = "/js/helpers.js")]
@@ -15,6 +19,15 @@ extern "C" {
     #[wasm_bindgen(js_name = export_file)]
     fn export_file(filename: &str, data: &str, data_type: &str);
 }
+
+// pub struct EventModal {
+//     modal_state: EventCalendarModalState,
+// }
+//
+// pub enum EventCalendarModalState {
+//     Closed = 0,
+//     Open = 1,
+// }
 
 pub trait CalendarSchedulableEvent {
     fn id(&self) -> String;
@@ -27,11 +40,13 @@ pub trait CalendarSchedulableEvent {
 pub struct EventCalendar {
     active_day: DateTime<Utc>,
     active_month: DateTime<Utc>,
+    active_event: Option<ScheduledEvent>,
 }
 
 pub enum EventCalendarMsg {
     ChangeDate(DateTime<Utc>),
     ChangeDay(DateTime<Utc>),
+    ScheduledEventDetails(Option<ScheduledEvent>),
     ExportCsv,
 }
 
@@ -70,7 +85,155 @@ fn get_calendar_cells(date: &DateTime<Utc>) -> Vec<Option<NaiveDate>> {
     cells
 }
 
-fn formatted_event_line(se: &ScheduledEvent) -> Html {
+#[derive(Clone, PartialEq, Properties)]
+pub struct EventDetailsProps {
+    pub scheduled_event: ScheduledEvent,
+    pub onclosed: Callback<bool>
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct Details {
+    pub title: String,
+    pub subtitle: String,
+    pub overview: String,
+    pub air_date: String,
+    pub runtime: usize,
+    pub rating: String,
+}
+
+struct EventDetails {
+    details: Option<Details>
+}
+
+enum EventDetailsMsg {
+    Loading,
+    DetailsLoaded(Details)
+}
+
+impl Component for EventDetails {
+    type Message = EventDetailsMsg;
+    type Properties = EventDetailsProps;
+
+    fn create(ctx: &Context<Self>) -> Self {
+        EventDetails { details: None }
+    }
+
+    fn view(&self, ctx: &Context<Self>) -> Html {
+        //let sc = TMDB::new(LocalStorage::get(ByngerStore::TmdbApiKey.to_string()).expect("Missing API Key"));
+        let event = ctx.props().scheduled_event.clone();
+        let oce = ctx.props().onclosed.clone();
+        let onclick = Callback::from(move |_| {
+            oce.emit(true)
+        });
+        if self.details.is_none() {
+            ctx.link().send_message(EventDetailsMsg::Loading);
+        }
+
+        html! {
+            <>
+            if let Some(ep) = &self.details {
+                <div class="modal is-active">
+                    <div class="modal-background"></div>
+                    <div class="modal-card">
+                        <header class="modal-card-head pb-1 pt-1 pl-1 pr-1">
+                            <div class="modal-card-title mt-0 mb-0 p-0">
+                                <h1 class="title">{&ep.title.to_string()}</h1>
+                                <h2 class="subtitle">{&ep.subtitle.to_string()}</h2>
+                            </div>
+                            <button class="delete is-large pl-1" aria-label="close" {onclick}></button>
+                        </header>
+                         <section class="modal-card-body pb-1 pt-1">
+                            <p>
+                               {&ep.overview.to_string()}
+                            </p>
+                         </section>
+                        <footer class="modal-card-foot pb-1 pt-1">
+                        </footer>
+                    </div>
+                </div>
+            } else {
+                <div class="modal is-active">
+                    <div class="modal-background"></div>
+                    <div class="modal-card">
+                        <header class="modal-card-head pb-1 pt-1 pl-1 pr-1">
+                            <div class="modal-card-title mt-0 mb-0 p-0">
+                                <h1 class="title">{"FARTS1"}</h1>
+                                <h2 class="subtitle">{"FARTS2"}</h2>
+                            </div>
+                            <button class="delete is-large pl-1" aria-label="close" {onclick}></button>
+                        </header>
+                         <section class="modal-card-body pb-1 pt-1">
+                            <p>
+                                {"LOADING..."}
+                            </p>
+                         </section>
+                        <footer class="modal-card-foot pb-1 pt-1">
+                        </footer>
+                    </div>
+                </div>
+            }
+            </>
+        }
+    }
+
+    fn update(&mut self, ctx: &Context<Self>, msg: EventDetailsMsg) -> bool {
+        match msg {
+            EventDetailsMsg::Loading => {
+                let _ep = ctx.props().scheduled_event.episode.as_ref().unwrap().clone();
+                ctx.link().send_future(async move {
+                    let sc = TMDB::new(LocalStorage::get(ByngerStore::TmdbApiKey.to_string()).expect("Missing API Key"));
+                    let res = sc.get_tv_season_episode(&_ep.show_id.to_string(), _ep.season_number, _ep.episode_number).await;
+                    match res {
+                        None => { EventDetailsMsg::Loading }
+                        Some(e) => {
+                            let det = Details {
+                                title: e.name.to_string(),
+                                subtitle: format!("Aired: {} - Runtime: {}", e.air_date.unwrap().to_string(), e.runtime.unwrap().to_string()),
+                                overview: e.overview.unwrap().to_string(),
+                                air_date: "".to_string(),
+                                runtime: 0,
+                                rating: "".to_string(),
+                            };
+
+                            //console_log!(format!("{e:?}"));
+                            EventDetailsMsg::DetailsLoaded(det)
+                        }
+                    }
+                });
+
+                false
+            }
+            EventDetailsMsg::DetailsLoaded(det) => {
+                console_log!(format!("{det:?}"));
+                self.details = Some(det);
+
+                true
+            }
+        }
+    }
+
+}
+
+#[derive(Clone, PartialEq, Properties)]
+pub struct EventItemProps {
+    pub scheduled_event: ScheduledEvent,
+    pub onclick: Callback<Option<ScheduledEvent>>
+}
+
+#[function_component(EventItem)]
+pub fn event_item(props: &EventItemProps) -> Html {
+    let se = props.scheduled_event.clone();
+    let out = props.scheduled_event.clone();
+    let oce = props.onclick.clone();
+    let onclick = Callback::from(move |_| {
+        oce.emit(Some(out.clone()))
+    });
+    // let oce = Callback::from(| _: MouseEvent| {
+    //         EventCalendarMsg::EventDetails("Blap".parse().unwrap());
+    // });
+    //
+    // let oce = |_| EventCalendarMsg::EventDetails("Blap".parse().unwrap());
+
     let (text, icon) = match se.media_type {
         MediaType::tv => {
             // [ICON] 16:30 | The Office - The Dundies
@@ -97,7 +260,7 @@ fn formatted_event_line(se: &ScheduledEvent) -> Html {
     };
 
     html! {
-        <a class="panel-block schedule-item">
+        <a class="panel-block schedule-item" {onclick}>
             <span class="panel-icon">
                 <i class={icon} aria-hidden="true"></i>
             </span>
@@ -117,6 +280,7 @@ impl Component for EventCalendar {
         Self {
             active_day: current_date,
             active_month: current_date,
+            active_event: None,
         }
     }
 
@@ -136,12 +300,21 @@ impl Component for EventCalendar {
 
                 true
             }
-            EventCalendarMsg::ExportCsv => {
+            ScheduledEventDetails(scheduled_event) => {
+                console_log!(format!("Showing details for: {scheduled_event:?}"));
+                self.active_event = scheduled_event;
+                true
+            }
+            ExportCsv => {
                 let mut em = EventManager::create();
                 if let Ok(csv) = em.events_as_csv(CsvType::GCAL) {
                     // Push our CSV to the client as it's own file.
                     let now = Utc::now().format("%Y%m%d_%H%M%S");
-                    export_file(format!("bynger_event_export_{}.csv", now).as_str(), &csv, "text/csv")
+                    export_file(
+                        format!("bynger_event_export_{now}.csv").as_str(),
+                        &csv,
+                        "text/csv",
+                    )
                 }
 
                 false
@@ -154,6 +327,8 @@ impl Component for EventCalendar {
         let day = self.active_day;
         let date = self.active_month;
         let dn = day.date_naive();
+        let onclick_event = ctx.link().callback(move |ev| ScheduledEventDetails(ev));
+        let onclick_close = ctx.link().callback(move |_| ScheduledEventDetails(None));
         let onexport = ctx.link().callback(|_| EventCalendarMsg::ExportCsv);
         let chevron_click = ctx.link().callback(move |me: MouseEvent| {
             let mut out_date = date;
@@ -268,6 +443,7 @@ impl Component for EventCalendar {
             .collect::<Html>();
 
         html! {
+            <>
             <div class="is-centered box calendar-container">
                 <div class="columns">
                     <div class="column calendar-left">
@@ -292,7 +468,13 @@ impl Component for EventCalendar {
                                     <p class="subtitle">{"Schedule"}</p>
                                     {
                                         day_events.iter().map(|&ev| {
-                                            formatted_event_line(ev)
+                                            //formatted_event_line(ev)
+                                            html!{
+                                                <EventItem
+                                                scheduled_event={ev.clone()}
+                                                onclick={onclick_event.clone()}
+                                            />
+                                            }
                                         }).collect::<Html>()
                                     }
                                 </div>
@@ -351,6 +533,30 @@ impl Component for EventCalendar {
                     </div>
                 </div>
             </div>
+
+            if self.active_event.is_some() {
+
+                <EventDetails scheduled_event={self.active_event.clone().unwrap()} onclosed={onclick_close} />
+                // <div class="modal is-active">
+                //     <div class="modal-background"></div>
+                //     <div class="modal-card">
+                //         <header class="modal-card-head pb-1 pt-1 pl-1 pr-1">
+                //             <div class="modal-card-title mt-0 mb-0 p-0">
+                //                 <h1 class="title">{"CHANGE TITLE"}</h1>
+                //                 <h2 class="subtitle">{"CHANGE SUBTITLE"}</h2>
+                //             </div>
+                //             <button class="delete is-large pl-1" aria-label="close" onclick={onclick_close}></button>
+                //         </header>
+                //          <section class="modal-card-body pb-1 pt-1">
+                //          </section>
+                //         <footer class="modal-card-foot pb-1 pt-1">
+                //         </footer>
+                //     </div>
+                // </div>
+            }
+
+
+            </>
         }
     }
 }
