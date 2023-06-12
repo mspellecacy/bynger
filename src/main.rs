@@ -9,6 +9,7 @@ use yew_router::prelude::*;
 
 mod episodes_picker;
 mod event_calendar;
+mod event_details;
 mod event_manager;
 mod events;
 mod find_show;
@@ -54,7 +55,7 @@ impl Component for Bynger {
         }
     }
 
-    fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
+    fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             ByngerMsg::ToggleNav => {
                 self.nav_open = !self.nav_open;

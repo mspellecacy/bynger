@@ -332,13 +332,13 @@ impl Component for ScheduleShow {
                         }
 
                         // Push our current episode with the available date
-                        scheduled_events.push(
-                            ScheduledEvent {
-                                uuid: Uuid::new_v4(),
-                                scheduled_date: DateTime::from_utc(curr_date, Utc),
-                                media_type: ep.media_type(),
-                                episode: Some(ep.to_owned()),
-                                movie: None,
+                        scheduled_events.push(ScheduledEvent {
+                            uuid: Uuid::new_v4(),
+                            scheduled_date: DateTime::from_utc(curr_date, Utc),
+                            media_type: ep.media_type(),
+                            episode: Some(ep.to_owned()),
+                            movie: None,
+                            watched: false,
                         });
 
                         // Advance our currently schedulable datetime by the episode's length
@@ -402,19 +402,18 @@ impl Component for ScheduleShow {
                     movie_id: show.id.parse().unwrap(),
                     runtime: show
                         .episode_run_time
-                        .unwrap()
-                        .get(0)
+                        .unwrap().first()
                         .expect("Missing Runtime")
                         .clone(),
                 };
 
-                let scheduled_event = Vec::from([
-                    ScheduledEvent {
-                        uuid: Uuid::new_v4(),
-                        scheduled_date,
-                        media_type: self.show.clone().unwrap().media_type,
-                        episode: None,
-                        movie: Some(movie),
+                let scheduled_event = Vec::from([ScheduledEvent {
+                    uuid: Uuid::new_v4(),
+                    scheduled_date,
+                    media_type: self.show.clone().unwrap().media_type,
+                    episode: None,
+                    movie: Some(movie),
+                    watched: false,
                 }]);
 
                 let mut em = EventManager::create();

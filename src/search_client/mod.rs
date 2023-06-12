@@ -375,9 +375,15 @@ impl TMDB {
         }
     }
 
-    pub async fn get_tv_season_episode(&self, id: &String, season: usize, episode: usize) -> Option<TMDBEpisodeObj> {
+    pub async fn get_tv_season_episode(
+        &self,
+        id: &String,
+        season: usize,
+        episode: usize,
+    ) -> Option<TMDBEpisodeObj> {
         let key = self.api_key.clone();
-        let base = format!("https://api.themoviedb.org/3/tv/{id}/season/{season}/episode/{episode}");
+        let base =
+            format!("https://api.themoviedb.org/3/tv/{id}/season/{season}/episode/{episode}");
         let postfix = format!("?api_key={key}");
         let url = format!("{base}{postfix}");
 
@@ -410,22 +416,16 @@ impl TMDB {
                     })
                     .collect();
 
-                // let test = join_all(seasons).await.into_iter().fold_ok(Vec::<TMDBSeasonObj>::new(), |mut acc, se| {
-                //     acc.push(se);
-                //     acc
-                // });
-                // Some(test.unwrap())
-
                 match try_join_all(seasons).await {
                     Ok(seasons) => Some(seasons),
                     Err(e) => {
-                        console_log!(format!("Failed TV Season Fetch Join - {}", e));
+                        console_log!(format!("Failed TV Season Fetch Join - {e}"));
                         None
                     }
                 }
             }
             Err(e) => {
-                console_log!(format!("Failed TV Season Fetch - {}", e));
+                console_log!(format!("Failed TV Season Fetch - {e}"));
                 None
             }
         }

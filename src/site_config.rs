@@ -1,13 +1,8 @@
 use std::fmt::{Display, Formatter};
-use std::ops::Deref;
-
 use gloo::storage::{LocalStorage, Storage};
-
 use wasm_bindgen::JsCast;
 use web_sys::{EventTarget, HtmlInputElement};
 use weblog::{console_error, console_info};
-
-use crate::search_client::MediaType;
 use yew::prelude::*;
 
 #[derive(Clone, PartialEq, Eq)]
@@ -42,7 +37,7 @@ impl Component for SiteConfig {
     type Message = SiteConfigMsg;
     type Properties = ();
 
-    fn create(ctx: &Context<Self>) -> Self {
+    fn create(_ctx: &Context<Self>) -> Self {
         let tmdb_api_key =
             LocalStorage::get(ByngerStore::TmdbApiKey.to_string()).unwrap_or_default();
         let schedule_entries = Some(

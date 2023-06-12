@@ -9,13 +9,15 @@ use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ScheduledEvent {
-    pub uuid: Uuid,  // Lazy PK, but it works.
+    pub uuid: Uuid, // Lazy PK, but it works.
     // Store it all as Utc. Let the UI apply Timezone Offset
     pub scheduled_date: DateTime<Utc>,
     pub media_type: MediaType,
     // Scheduled Events must implement the CalendarSchedulableEvent trait use by the Event Calendar.
     pub episode: Option<Episode>,
     pub movie: Option<Movie>,
+    #[serde(default)]
+    pub watched: bool,
 }
 
 // pub trait ShowEvent {

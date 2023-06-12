@@ -4,6 +4,8 @@ use chrono::Duration;
 use gloo::storage::errors::StorageError;
 use gloo::storage::{LocalStorage, Storage};
 use std::ops::Add;
+use uuid::Uuid;
+
 
 use crate::events::ScheduledEvent;
 use crate::search_client::MediaType;
@@ -48,6 +50,22 @@ impl EventManager {
 
     fn purge_events(&mut self) -> Result<(), StorageError> {
         self.events.clear();
+
+        self.store()
+    }
+
+    pub fn watched_event(&mut self, event_id: Uuid) -> Result<(), StorageError> {
+        if let Some(pos) = self.events.iter().position(|se| se.uuid == event_id) {
+            self.events[pos].watched = true;
+        }
+
+        self.store()
+    }
+
+    pub fn remove_event(&mut self, event_id: Uuid) -> Result<(), StorageError> {
+        if let Some(pos) = self.events.iter().position(|se| se.uuid == event_id) {
+            self.events.remove(pos);
+        }
 
         self.store()
     }
