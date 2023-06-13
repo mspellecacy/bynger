@@ -1,13 +1,21 @@
 use chrono::{DateTime, Datelike, Duration, NaiveDate, NaiveTime, TimeZone, Utc};
+
+
 use std::ops::Sub;
+use uuid::Uuid;
 use wasm_bindgen::prelude::wasm_bindgen;
+
 
 use yew::prelude::*;
 
-use crate::event_calendar::EventCalendarMsg::{ChangeDate, ChangeDay};
+use crate::event_calendar::EventCalendarMsg::{
+    ChangeDate, ChangeDay, RemoveEvent, ScheduledEventDetails, WatchedEvent,
+};
+use crate::event_details::EventDetails;
 use crate::event_manager::{CsvType, EventManager};
 use crate::events::ScheduledEvent;
-use crate::search_client::MediaType;
+use crate::search_client::{MediaType};
+
 use crate::ui_helpers::UiHelpers;
 
 #[wasm_bindgen(module = "/js/helpers.js")]
@@ -15,6 +23,15 @@ extern "C" {
     #[wasm_bindgen(js_name = export_file)]
     fn export_file(filename: &str, data: &str, data_type: &str);
 }
+
+// pub struct EventModal {
+//     modal_state: EventCalendarModalState,
+// }
+//
+// pub enum EventCalendarModalState {
+//     Closed = 0,
+//     Open = 1,
+// }
 
 pub trait CalendarSchedulableEvent {
     fn id(&self) -> String;
@@ -27,11 +44,15 @@ pub trait CalendarSchedulableEvent {
 pub struct EventCalendar {
     active_day: DateTime<Utc>,
     active_month: DateTime<Utc>,
+    active_event: Option<ScheduledEvent>,
 }
 
 pub enum EventCalendarMsg {
     ChangeDate(DateTime<Utc>),
     ChangeDay(DateTime<Utc>),
+    ScheduledEventDetails(Option<ScheduledEvent>),
+    RemoveEvent(Uuid),
+    WatchedEvent(Uuid),
     ExportCsv,
 }
 
@@ -70,7 +91,24 @@ fn get_calendar_cells(date: &DateTime<Utc>) -> Vec<Option<NaiveDate>> {
     cells
 }
 
-fn formatted_event_line(se: &ScheduledEvent) -> Html {
+#[derive(Clone, PartialEq, Properties)]
+pub struct EventItemProps {
+    pub scheduled_event: ScheduledEvent,
+    pub onclick: Callback<Option<ScheduledEvent>>,
+}
+
+#[function_component(EventItem)]
+pub fn event_item(props: &EventItemProps) -> Html {
+    let se = props.scheduled_event.clone();
+    let out = props.scheduled_event.clone();
+    let oce = props.onclick.clone();
+    let onclick = Callback::from(move |_| oce.emit(Some(out.clone())));
+    // let oce = Callback::from(| _: MouseEvent| {
+    //         EventCalendarMsg::EventDetails("Blap".parse().unwrap());
+    // });
+    //
+    // let oce = |_| EventCalendarMsg::EventDetails("Blap".parse().unwrap());
+
     let (text, icon) = match se.media_type {
         MediaType::tv => {
             // [ICON] 16:30 | The Office - The Dundies
@@ -96,8 +134,13 @@ fn formatted_event_line(se: &ScheduledEvent) -> Html {
         MediaType::unknown => (String::from("Unknown"), String::from("gg-danger")),
     };
 
+    let mut class = classes!("panel-block", "schedule-item");
+    if se.watched {
+        class.push("event-watched");
+    }
+
     html! {
-        <a class="panel-block schedule-item">
+        <a {class} {onclick}>
             <span class="panel-icon">
                 <i class={icon} aria-hidden="true"></i>
             </span>
@@ -117,6 +160,7 @@ impl Component for EventCalendar {
         Self {
             active_day: current_date,
             active_month: current_date,
+            active_event: None,
         }
     }
 
@@ -136,14 +180,36 @@ impl Component for EventCalendar {
 
                 true
             }
-            EventCalendarMsg::ExportCsv => {
+            ScheduledEventDetails(scheduled_event) => {
+                // console_log!(format!("Showing details for: {scheduled_event:?}"));
+                self.active_event = scheduled_event;
+                true
+            }
+            RemoveEvent(event_id) => {
+                let mut em = EventManager::create();
+                let _ = em.remove_event(event_id);
+                self.active_event = None;
+
+                true
+            }
+            WatchedEvent(event_id) => {
+                let mut em = EventManager::create();
+                let _ = em.watched_event(event_id);
+                self.active_event = None;
+
+                true
+            }
+            ExportCsv => {
                 let mut em = EventManager::create();
                 if let Ok(csv) = em.events_as_csv(CsvType::GCAL) {
                     // Push our CSV to the client as it's own file.
                     let now = Utc::now().format("%Y%m%d_%H%M%S");
-                    export_file(format!("bynger_event_export_{}.csv", now).as_str(), &csv, "text/csv")
+                    export_file(
+                        format!("bynger_event_export_{now}.csv").as_str(),
+                        &csv,
+                        "text/csv",
+                    )
                 }
-
                 false
             }
         }
@@ -154,6 +220,11 @@ impl Component for EventCalendar {
         let day = self.active_day;
         let date = self.active_month;
         let dn = day.date_naive();
+        let onclick_event = ctx.link().callback(ScheduledEventDetails);
+        let onclick_event_close = ctx.link().callback(move |_| ScheduledEventDetails(None));
+        let onclick_event_remove = ctx.link().callback(RemoveEvent);
+        let onclick_event_watched = ctx.link().callback(WatchedEvent);
+
         let onexport = ctx.link().callback(|_| EventCalendarMsg::ExportCsv);
         let chevron_click = ctx.link().callback(move |me: MouseEvent| {
             let mut out_date = date;
@@ -268,6 +339,7 @@ impl Component for EventCalendar {
             .collect::<Html>();
 
         html! {
+            <>
             <div class="is-centered box calendar-container">
                 <div class="columns">
                     <div class="column calendar-left">
@@ -292,7 +364,13 @@ impl Component for EventCalendar {
                                     <p class="subtitle">{"Schedule"}</p>
                                     {
                                         day_events.iter().map(|&ev| {
-                                            formatted_event_line(ev)
+                                            //formatted_event_line(ev)
+                                            html!{
+                                                <EventItem
+                                                scheduled_event={ev.clone()}
+                                                onclick={onclick_event.clone()}
+                                            />
+                                            }
                                         }).collect::<Html>()
                                     }
                                 </div>
@@ -351,6 +429,15 @@ impl Component for EventCalendar {
                     </div>
                 </div>
             </div>
+            if self.active_event.is_some() {
+                <EventDetails
+                    scheduled_event={self.active_event.clone().unwrap()}
+                    onclosed={onclick_event_close}
+                    onwatched={onclick_event_watched}
+                    onremove={onclick_event_remove}
+                />
+            }
+            </>
         }
     }
 }

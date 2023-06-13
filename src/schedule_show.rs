@@ -23,6 +23,7 @@ use crate::site_config::ByngerStore;
 use crate::ui_helpers::UiHelpers;
 
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 use web_sys::HtmlElement;
 
 #[wasm_bindgen(module = "/js/helpers.js")]
@@ -51,7 +52,7 @@ pub struct SchedulingOptions {
 
 // FIXME: These structs should probably get moved in to a search_client as generic output types.
 // TODO: This is a bit redundant, but eventually I would like to have a more generic search client.
-#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Episode {
     pub air_date: String,
     pub episode_number: usize,
@@ -64,7 +65,7 @@ pub struct Episode {
     pub show_id: usize,
 }
 
-#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Movie {
     pub release_date: String,
     pub show_name: String,
@@ -154,6 +155,7 @@ impl Component for ScheduleShow {
     type Properties = ScheduleProps;
 
     fn create(ctx: &Context<Self>) -> Self {
+        let _blap: isize = 10;
         ctx.link().send_message(ScheduleShowMsg::FetchShow);
         let api_key: String =
             LocalStorage::get(ByngerStore::TmdbApiKey.to_string()).expect("Missing API Key");
@@ -331,10 +333,12 @@ impl Component for ScheduleShow {
 
                         // Push our current episode with the available date
                         scheduled_events.push(ScheduledEvent {
+                            uuid: Uuid::new_v4(),
                             scheduled_date: DateTime::from_utc(curr_date, Utc),
                             media_type: ep.media_type(),
                             episode: Some(ep.to_owned()),
                             movie: None,
+                            watched: false,
                         });
 
                         // Advance our currently schedulable datetime by the episode's length
@@ -398,17 +402,18 @@ impl Component for ScheduleShow {
                     movie_id: show.id.parse().unwrap(),
                     runtime: show
                         .episode_run_time
-                        .unwrap()
-                        .get(0)
+                        .unwrap().first()
                         .expect("Missing Runtime")
                         .clone(),
                 };
 
                 let scheduled_event = Vec::from([ScheduledEvent {
+                    uuid: Uuid::new_v4(),
                     scheduled_date,
                     media_type: self.show.clone().unwrap().media_type,
                     episode: None,
                     movie: Some(movie),
+                    watched: false,
                 }]);
 
                 let mut em = EventManager::create();

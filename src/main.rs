@@ -9,6 +9,7 @@ use yew_router::prelude::*;
 
 mod episodes_picker;
 mod event_calendar;
+mod event_details;
 mod event_manager;
 mod events;
 mod find_show;
@@ -54,7 +55,7 @@ impl Component for Bynger {
         }
     }
 
-    fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
+    fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             ByngerMsg::ToggleNav => {
                 self.nav_open = !self.nav_open;
@@ -69,7 +70,8 @@ impl Component for Bynger {
         html! {
             <BrowserRouter>
                 <nav class="navbar" role="navigation" aria-label="main navigation">
-                    <div class="navbar-brand">
+                    <div class="navbar-brand"></div>
+                    <div class="navbar-menu">
                         <a class="navbar-item" href="/">
                             <span class="icon">
                                 <i class="gg-bot"></i>
@@ -86,15 +88,12 @@ impl Component for Bynger {
                     </div>
                     <div class={classes!("navbar-menu", is_active)}>
                         <div class="navbar-start">
-                            <div onclick={&toggle_nav} class="navbar-item">
-                                <Link<Route> to={Route::Home}>{ "Home" }</Link<Route>>
-                            </div>
-                            <div onclick={&toggle_nav} class="navbar-item">
-                                <Link<Route> to={Route::Schedule}>{ "Schedule" }</Link<Route>>
-                            </div>
-                            <div onclick={&toggle_nav} class="navbar-item">
-                                <Link<Route> to={Route::Config}>{ "Config" }</Link<Route>>
-                            </div>
+                            <Link<Route> to={Route::Home} classes="navbar-item">{ "Home" }</Link<Route>>
+                            <Link<Route> to={Route::Schedule} classes="navbar-item">{ "Schedule" }</Link<Route>>
+                            <Link<Route> to={Route::Config} classes="navbar-item">{ "Config" }</Link<Route>>
+                        </div>
+                        <div class="navbar-end">
+                            <a class="navbar-item" href="https://github.com/mspellecacy/bynger" target="_blank"> {"Github"} </a>
                         </div>
                     </div>
                 </nav>
