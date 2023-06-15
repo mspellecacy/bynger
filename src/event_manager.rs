@@ -1,6 +1,6 @@
 use std::error::Error;
 
-use chrono::Duration;
+use chrono::{DateTime, Duration, Utc};
 use gloo::storage::errors::StorageError;
 use gloo::storage::{LocalStorage, Storage};
 use std::ops::Add;
@@ -56,7 +56,15 @@ impl EventManager {
 
     pub fn watched_event(&mut self, event_id: Uuid) -> Result<(), StorageError> {
         if let Some(pos) = self.events.iter().position(|se| se.uuid == event_id) {
-            self.events[pos].watched = true;
+            self.events[pos].watched = !self.events[pos].watched;
+        }
+
+        self.store()
+    }
+
+    pub fn reschedule_event(&mut self, event_id: Uuid, datetime: DateTime<Utc>) -> Result<(), StorageError> {
+        if let Some(pos) = self.events.iter().position(|se| se.uuid == event_id) {
+            self.events[pos].scheduled_date = datetime;
         }
 
         self.store()

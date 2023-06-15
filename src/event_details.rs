@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use crate::events::ScheduledEvent;
 use crate::search_client::{MediaType, TMDB};
 use crate::site_config::ByngerStore;
@@ -6,6 +7,7 @@ use uuid::Uuid;
 
 use yew::prelude::*;
 use yew::{html, Callback, Component, Context, Html};
+use crate::datetime_picker::DateTimePicker;
 
 #[derive(Clone, PartialEq, Properties)]
 pub struct EventDetailsProps {
@@ -13,6 +15,7 @@ pub struct EventDetailsProps {
     pub onclosed: Callback<bool>,
     pub onremove: Callback<Uuid>,
     pub onwatched: Callback<Uuid>,
+    pub onreschedule: Callback<(Uuid, DateTime<Utc>)>
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -72,9 +75,8 @@ impl Component for EventDetails {
                                             .unwrap_or("".to_string()),
                                         title: e.name.to_string(),
                                         subtitle: format!(
-                                            "Season: {} Episode: {}",
-                                            e.season_number, e.episode_number
-                                        ),
+                                            "{} | Season: {} Episode: {}",
+                                            _ep.show_name, e.season_number, e.episode_number                                        ),
                                         overview: e.overview.unwrap(),
                                         air_date: e.air_date.unwrap(),
                                         runtime: e.runtime.unwrap(),
@@ -134,12 +136,19 @@ impl Component for EventDetails {
         let oce = ctx.props().onclosed.clone();
         let ore = ctx.props().onremove.clone();
         let owe = ctx.props().onwatched.clone();
+        let ors = ctx.props().onreschedule.clone();
         let onclose = Callback::from(move |_| oce.emit(true));
         let onremove = Callback::from(move |_| ore.emit(event.uuid));
         let onwatched = Callback::from(move |_| owe.emit(event.uuid));
+        let onreschedule = Callback::from(move |dt:DateTime<Utc>| ors.emit((event.uuid, dt.clone())));
+
+
+        let mut watched_class = classes!("button", "is-info");
+        if event.watched {
+            watched_class.push(classes!("event-watched", "is-outlined"));
+        }
 
         html! {
-
             if let Some(det) = &self.details {
                 <div class="modal is-active">
                     <div class="modal-background"></div>
@@ -162,15 +171,26 @@ impl Component for EventDetails {
                                     </figure>
                                 </div>
                             </div>
+                            <div class="box">
+                                <div class="field has-addons has-addons-centered">
+                                    <p class="control">
+                                        <DateTimePicker label="RESCHEDULE" onclick={onreschedule}/>
+                                    </p>
+                                </div>
+                                <div class="field is-grouped is-grouped-centered">
+                                    <p class="control">
+                                        <button class={watched_class} aria-label="watched" onclick={onwatched}>
+                                            {"WATCHED"}
+                                        </button>
+                                    </p>
+                                    <p class="control">
+                                        <button class="button is-danger" aria-label="remove" onclick={onremove}>
+                                            {"REMOVE"}
+                                        </button>
+                                    </p>
+                                </div>
+                            </div>
                          </section>
-                        <footer class="modal-card-foot">
-                            <button class="button is-danger" aria-label="remove" onclick={onremove}>
-                                {"REMOVE"}
-                            </button>
-                            <button class="button is-primary" aria-label="watched" onclick={onwatched}>
-                                {"WATCHED"}
-                            </button>
-                        </footer>
                     </div>
                 </div>
             }

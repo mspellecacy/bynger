@@ -19,6 +19,7 @@ mod show_card;
 mod site_config;
 mod tv_card;
 mod ui_helpers;
+mod datetime_picker;
 
 use crate::event_calendar::EventCalendar;
 use crate::find_show::FindShow;
