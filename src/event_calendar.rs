@@ -1,21 +1,14 @@
 use chrono::{DateTime, Datelike, Duration, NaiveDate, NaiveTime, TimeZone, Utc};
-
-
 use std::ops::Sub;
 use uuid::Uuid;
 use wasm_bindgen::prelude::wasm_bindgen;
-
-
+use weblog::console_log;
 use yew::prelude::*;
-
-use crate::event_calendar::EventCalendarMsg::{
-    ChangeDate, ChangeDay, RemoveEvent, ScheduledEventDetails, WatchedEvent,
-};
+use crate::event_calendar::EventCalendarMsg::{ChangeDate, ChangeDay, RemoveEvent, RescheduleEvent, ScheduledEventDetails, WatchedEvent};
 use crate::event_details::EventDetails;
 use crate::event_manager::{CsvType, EventManager};
 use crate::events::ScheduledEvent;
 use crate::search_client::{MediaType};
-
 use crate::ui_helpers::UiHelpers;
 
 #[wasm_bindgen(module = "/js/helpers.js")]
@@ -53,6 +46,7 @@ pub enum EventCalendarMsg {
     ScheduledEventDetails(Option<ScheduledEvent>),
     RemoveEvent(Uuid),
     WatchedEvent(Uuid),
+    RescheduleEvent(Uuid, DateTime<Utc>),
     ExportCsv,
 }
 
@@ -199,6 +193,15 @@ impl Component for EventCalendar {
 
                 true
             }
+            RescheduleEvent(event_id, datetime) => {
+                console_log!(format!("Rescheduling: {event_id}\nTo:{datetime}"));
+
+                let mut em = EventManager::create();
+                let _ = em.reschedule_event(event_id, datetime);
+                self.active_event = None;
+
+                true
+            }
             ExportCsv => {
                 let mut em = EventManager::create();
                 if let Ok(csv) = em.events_as_csv(CsvType::GCAL) {
@@ -224,6 +227,7 @@ impl Component for EventCalendar {
         let onclick_event_close = ctx.link().callback(move |_| ScheduledEventDetails(None));
         let onclick_event_remove = ctx.link().callback(RemoveEvent);
         let onclick_event_watched = ctx.link().callback(WatchedEvent);
+        let onclick_event_reschedule = ctx.link().callback(move |(uuid, dt)| RescheduleEvent(uuid, dt));
 
         let onexport = ctx.link().callback(|_| EventCalendarMsg::ExportCsv);
         let chevron_click = ctx.link().callback(move |me: MouseEvent| {
@@ -435,6 +439,7 @@ impl Component for EventCalendar {
                     onclosed={onclick_event_close}
                     onwatched={onclick_event_watched}
                     onremove={onclick_event_remove}
+                    onreschedule={onclick_event_reschedule}
                 />
             }
             </>
